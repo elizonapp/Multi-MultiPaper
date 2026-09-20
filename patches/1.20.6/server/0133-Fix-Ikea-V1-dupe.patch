@@ -1,0 +1,22 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Xymb <xymb@endcrystal.me>
+Date: Sun, 29 Jan 2023 16:33:09 +0100
+Subject: [PATCH] Fix Ikea V1 dupe
+
+
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index ff115cb1f5476ba722f975e7d064131847866ecd..eed04a1925927b71ba0d0d03b38fdd4b4d208fda 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -3341,6 +3341,11 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+                     return entity1 != entity;
+                 }).collect(ImmutableList.toImmutableList());
+             }
++            // MultiPaper start
++            if (entity instanceof ServerPlayer player) {
++                player.closeContainer();
++            }
++            // MultiPaper end
+ 
+             entity.boardingCooldown = 60;
+             this.gameEvent(GameEvent.ENTITY_DISMOUNT, entity);

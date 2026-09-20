@@ -1,0 +1,69 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: officialplocki <officialplocki@gmx.de>
+Date: Sun, 20 Sep 2026 19:45:47 +0200
+Subject: [PATCH] Close vehicle inventories when transferring to another server
+
+
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index dcd1bc4b599e6710cca6fb3610dfd03464892f85..445ae4f59b87b982684931ea4692f1bfcf3b5af3 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -9,6 +9,7 @@ import com.mojang.logging.LogUtils;
+ import io.papermc.paper.chunk.system.scheduling.NewChunkHolder;
+ import it.unimi.dsi.fastutil.objects.Object2DoubleArrayMap;
+ import it.unimi.dsi.fastutil.objects.Object2DoubleMap;
++import java.util.ArrayList;
+ import java.util.Arrays;
+ import java.util.Comparator;
+ import java.util.HashSet;
+@@ -79,6 +80,7 @@ import net.minecraft.tags.FluidTags;
+ import net.minecraft.tags.TagKey;
+ import net.minecraft.util.Mth;
+ import net.minecraft.util.RandomSource;
++import net.minecraft.world.Container;
+ import net.minecraft.world.InteractionHand;
+ import net.minecraft.world.InteractionResult;
+ import net.minecraft.world.Nameable;
+@@ -129,6 +131,8 @@ import net.minecraft.world.phys.shapes.VoxelShape;
+ import net.minecraft.world.scores.PlayerTeam;
+ import net.minecraft.world.scores.ScoreHolder;
+ import net.minecraft.world.scores.Team;
++import org.bukkit.entity.HumanEntity;
++import org.bukkit.event.inventory.InventoryCloseEvent;
+ import org.slf4j.Logger;
+ import org.bukkit.Bukkit;
+ import org.bukkit.Location;
+@@ -3252,6 +3256,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+                     servers.add(newController.externalServerConnection.externalServer);
+                 }
+ 
++                closeInventoriesRecursive(entity.getRootVehicle()); // Close any open inventories on the vehicle
+                 EntityUpdateWithDependenciesPacket.sendVehicleAndPassengersPacketsRecursivelyToServers(entity.getRootVehicle(), servers);
+             }
+             // MultiPaper end - inform other servers that the player is no longer riding the entity and hand them the entity's data
+@@ -3259,6 +3264,25 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+ 
+     }
+ 
++    // MultiPaper start - close inventories when an entity changes servers
++    private void closeInventoriesRecursive(Entity entity) {
++        if (entity instanceof Container container) {
++            List<HumanEntity> viewers = container.getViewers();
++            if (!viewers.isEmpty()) {
++                for (HumanEntity viewer : new ArrayList<>(container.getViewers())) {
++                    if (viewer instanceof CraftPlayer craftPlayer) {
++                        craftPlayer.closeInventory(InventoryCloseEvent.Reason.UNLOADED);
++                    }
++                }
++            }
++        }
++
++        for (Entity passenger : entity.getPassengers()) {
++            closeInventoriesRecursive(passenger);
++        }
++    }
++    // MultiPaper end - close inventories when an entity changes servers
++
+     public void stopRiding() {
+         // Paper start - Force entity dismount during teleportation
+         this.stopRiding(false);

@@ -1,0 +1,19 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: officialplocki <officialplocki@gmx.de>
+Date: Sun, 20 Sep 2026 19:32:59 +0200
+Subject: [PATCH] Only kick local afk players
+
+
+diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+index 89bc8089467ba8673a20bdce375823dd20f26310..e46b0f82f96d0c636fedf28018598be000a82ab9 100644
+--- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
++++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+@@ -424,7 +424,7 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
+         reduceSpamCounters();
+ // MultiPaper end
+ 
+-        if (this.player.getLastActionTime() > 0L && this.server.getPlayerIdleTimeout() > 0 && Util.getMillis() - this.player.getLastActionTime() > (long) this.server.getPlayerIdleTimeout() * 1000L * 60L && !this.player.wonGame) { // Paper - Prevent AFK kick while watching end credits
++        if (MultiPaper.isRealPlayer(this.player) && this.player.getLastActionTime() > 0L && this.server.getPlayerIdleTimeout() > 0 && Util.getMillis() - this.player.getLastActionTime() > (long) this.server.getPlayerIdleTimeout() * 1000L * 60L && !this.player.wonGame) { // Paper - Prevent AFK kick while watching end credits // MultiPaper - Only kick local afk players
+             // Purpur start
+             this.player.setAfk(true);
+             if (!this.player.level().purpurConfig.idleTimeoutKick || (!Boolean.parseBoolean(System.getenv("PURPUR_FORCE_IDLE_KICK")) && kickPermissionCache.getUnchecked(this.player.getBukkitEntity()))) {

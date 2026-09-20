@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: officialplocki <officialplocki@gmx.de>
+Date: Sun, 20 Sep 2026 19:14:10 +0200
+Subject: [PATCH] Don't send the horse armour equip sound when loading a horse
+
+
+diff --git a/src/main/java/net/minecraft/world/entity/animal/horse/Horse.java b/src/main/java/net/minecraft/world/entity/animal/horse/Horse.java
+index fdf9ec418b0fc567e286ac79dbdbeddac568ad67..4289f1a0fad20fe709a5e2afc9ddf2a425e47b16 100644
+--- a/src/main/java/net/minecraft/world/entity/animal/horse/Horse.java
++++ b/src/main/java/net/minecraft/world/entity/animal/horse/Horse.java
+@@ -35,6 +35,7 @@ import net.minecraft.world.level.block.SoundType;
+ 
+ public class Horse extends AbstractHorse implements VariantHolder<Variant> {
+     private static final EntityDataAccessor<Integer> DATA_ID_TYPE_VARIANT = SynchedEntityData.defineId(Horse.class, EntityDataSerializers.INT);
++    private boolean loadingArmor = false; // MultiPaper
+     private static final EntityDimensions BABY_DIMENSIONS = EntityType.HORSE
+         .getDimensions()
+         .withAttachments(EntityAttachments.builder().attach(EntityAttachment.PASSENGER, 0.0F, EntityType.HORSE.getHeight() + 0.125F, 0.0F))
+@@ -102,8 +103,10 @@ public class Horse extends AbstractHorse implements VariantHolder<Variant> {
+ 
+     @Override
+     public void readAdditionalSaveData(CompoundTag nbt) {
++        loadingArmor = true; // MultiPaper
+         super.readAdditionalSaveData(nbt);
+         this.setTypeVariant(nbt.getInt("Variant"));
++        loadingArmor = false; // MultiPaper
+     }
+ 
+     private void setTypeVariant(int variant) {
+@@ -137,7 +140,7 @@ public class Horse extends AbstractHorse implements VariantHolder<Variant> {
+         ItemStack itemStack = this.getBodyArmorItem();
+         super.containerChanged(sender);
+         ItemStack itemStack2 = this.getBodyArmorItem();
+-        if (this.tickCount > 20 && this.isBodyArmorItem(itemStack2) && itemStack != itemStack2) {
++        if (this.tickCount > 20 && this.isBodyArmorItem(itemStack2) && itemStack != itemStack2 && !loadingArmor) { // MultiPaper
+             this.playSound(SoundEvents.HORSE_ARMOR, 0.5F, 1.0F);
+         }
+     }

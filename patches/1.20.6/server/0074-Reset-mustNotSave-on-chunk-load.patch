@@ -1,0 +1,18 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Fri, 21 Jan 2022 09:58:45 +1000
+Subject: [PATCH] Reset mustNotSave on chunk load
+
+
+diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
+index a7ba77c1aa940a27b2ac3246e9d7927d35b47383..d16e5a37fb30b1a776ae58bf67013b8543fe4c70 100644
+--- a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
++++ b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
+@@ -799,6 +799,7 @@ public class LevelChunk extends ChunkAccess {
+     // CraftBukkit start
+     public void loadCallback() {
+         if (this.loadedTicketLevel) { LOGGER.error("Double calling chunk load!", new Throwable()); } // Paper
++        this.mustNotSave = false; // MultiPaper - Reset mustNotSave on chunk load
+         // Paper - rewrite chunk system - move into separate callback
+         this.loadedTicketLevel = true;
+         // Paper - rewrite chunk system - move into separate callback

@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+#
+# multipaper - version-independent runtime entry point for MultiPaper.
+#
+# Ensures the MultiPaper-Starter jar is built, then hands control to it. The
+# starter picks a Purpur version, applies the matching MultiPaper patches at
+# runtime (caching the result under ~/.multipaper/), and launches the server.
+#
+# Usage:
+#   ./multipaper                          resolve version (file/prompt) and run
+#   ./multipaper --purpur-version=1.20.6  explicit version
+#   ./multipaper --list-versions          list supported versions
+#   ./multipaper --help                   starter help
+#
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+java_major() {
+  "$1" -version 2>&1 | sed -nE '1s/.*version "([0-9]+).*/\1/p'
+}
+
+# accept_java <java-bin> - print the bin path if it is Java 17+, else return 1.
+accept_java() {
+  local bin="$1" major
+  [[ -x "$bin" ]] || return 1
+  major="$(java_major "$bin")"
+  [[ -n "$major" && "$major" -ge 17 ]] || return 1
+  printf '%s\n' "$bin"
+}
+
+# find_java - print the path to a Java 17+ executable, or return non-zero.
+find_java() {
+  if [[ -n "${JAVA_HOME:-}" ]]; then
+    accept_java "$JAVA_HOME/bin/java" && return 0
+  fi
+
+  if command -v java >/dev/null 2>&1; then
+    accept_java "$(command -v java)" && return 0
+  fi
+
+  # Gradle-provisioned JDKs come in a few layouts, e.g.
+  #   ~/.gradle/jdks/<vendor>/<jdk>/Contents/Home
+  local candidate
+  for candidate in \
+    "$HOME"/.gradle/jdks/*/*/Contents/Home \
+    "$HOME"/.gradle/jdks/*/Contents/Home \
+    "$HOME"/.gradle/jdks/*/* \
+    "$HOME"/.gradle/jdks/*; do
+    accept_java "$candidate/bin/java" && return 0
+  done
+
+  if [[ -x /usr/libexec/java_home ]]; then
+    local home
+    for home in "$(/usr/libexec/java_home -v 21 2>/dev/null || true)" \
+                "$(/usr/libexec/java_home -v 17+ 2>/dev/null || true)"; do
+      [[ -n "$home" ]] && accept_java "$home/bin/java" && return 0
+    done
+  fi
+
+  return 1
+}
+
+JAVA_BIN="$(find_java || true)"
+if [[ -z "$JAVA_BIN" ]]; then
+  echo "error: could not find a Java 17+ runtime. Set JAVA_HOME and try again." >&2
+  exit 1
+fi
+export JAVA_HOME="$(cd "$(dirname "$JAVA_BIN")/.." && pwd)"
+
+locate_starter_jar() {
+  local candidate
+  shopt -s nullglob
+  # Prefer the shaded jar, then the plain jar.
+  for candidate in "$SCRIPT_DIR"/MultiPaper-Starter/build/libs/multipaper-starter-all.jar \
+                   "$SCRIPT_DIR"/MultiPaper-Starter/build/libs/multipaper-starter.jar \
+                   "$SCRIPT_DIR"/MultiPaper-Starter/build/libs/multipaper-starter-*-all.jar \
+                   "$SCRIPT_DIR"/MultiPaper-Starter/build/libs/multipaper-starter-*.jar; do
+    case "$candidate" in
+      *-sources.jar|*-javadoc.jar) continue ;;
+    esac
+    shopt -u nullglob
+    printf '%s\n' "$candidate"
+    return 0
+  done
+  shopt -u nullglob
+  return 1
+}
+
+STARTER_JAR="$(locate_starter_jar || true)"
+if [[ -z "$STARTER_JAR" ]]; then
+  echo "MultiPaper-Starter jar not found; building it..." >&2
+  ./gradlew :multipaper-starter:shadowJar --console=plain
+  STARTER_JAR="$(locate_starter_jar || true)"
+fi
+
+if [[ -z "$STARTER_JAR" ]]; then
+  echo "error: failed to locate the built MultiPaper-Starter jar." >&2
+  exit 1
+fi
+
+JAVA_OPTS=()
+if [[ -n "${MULTIPAPER_JAVA_OPTS:-}" ]]; then
+  # Intentionally word-split so users can pass several JVM options.
+  # shellcheck disable=SC2206
+  JAVA_OPTS=($MULTIPAPER_JAVA_OPTS)
+fi
+
+exec "$JAVA_BIN" ${JAVA_OPTS[@]+"${JAVA_OPTS[@]}"} -jar "$STARTER_JAR" "$@"

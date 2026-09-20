@@ -1,0 +1,204 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: officialplocki <officialplocki@gmx.de>
+Date: Sun, 20 Sep 2026 19:28:58 +0200
+Subject: [PATCH] Add option to reduce tracking of inactive entities
+
+
+diff --git a/src/main/java/co/aikar/timings/WorldTimingsHandler.java b/src/main/java/co/aikar/timings/WorldTimingsHandler.java
+index 22687667ec69a954261e55e59261286ac1b8b8cd..80d8292a8c197acb1bbba066e5f0b0fce368bcf3 100644
+--- a/src/main/java/co/aikar/timings/WorldTimingsHandler.java
++++ b/src/main/java/co/aikar/timings/WorldTimingsHandler.java
+@@ -36,6 +36,7 @@ public class WorldTimingsHandler {
+     public final Timing tileEntityPending;
+     public final Timing tracker1;
+     public final Timing tracker2;
++    public final Timing trackerInactive; // MultiPaper
+     public final Timing doTick;
+     public final Timing tickEntities;
+     public final Timing chunks;
+@@ -110,6 +111,7 @@ public class WorldTimingsHandler {
+ 
+         tracker1 = Timings.ofSafe(name + "tracker stage 1");
+         tracker2 = Timings.ofSafe(name + "tracker stage 2");
++        trackerInactive = Timings.ofSafe(name + "tracker multipaper inactive stage"); // MultiPaper
+         doTick = Timings.ofSafe(name + "doTick");
+         tickEntities = Timings.ofSafe(name + "tickEntities");
+ 
+diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
+index 1dd8a8c89521d90634a95f414b44f251ba87da60..2dd7799e096f32cd25665e2097856022c7658738 100644
+--- a/src/main/java/net/minecraft/server/level/ChunkMap.java
++++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
+@@ -1164,6 +1164,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+ 
+     // Paper start - optimised tracker
+     private final void processTrackQueue() {
++        if (this.level.inactiveTracker.tick()) return; // MultiPaper - inactive tracker
++
+         //this.level.timings.tracker1.startTiming(); // Purpur
+         try {
+             for (TrackedEntity tracker : this.entityMap.values()) {
+@@ -1343,7 +1345,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+         // Paper start - use distance map to optimise tracker
+         com.destroystokyo.paper.util.misc.PooledLinkedHashSets.PooledObjectLinkedOpenHashSet<ServerPlayer> lastTrackerCandidates;
+ 
+-        final void updatePlayers(com.destroystokyo.paper.util.misc.PooledLinkedHashSets.PooledObjectLinkedOpenHashSet<ServerPlayer> newTrackerCandidates) {
++        public final void updatePlayers(com.destroystokyo.paper.util.misc.PooledLinkedHashSets.PooledObjectLinkedOpenHashSet<ServerPlayer> newTrackerCandidates) { // MultiPaper
+             com.destroystokyo.paper.util.misc.PooledLinkedHashSets.PooledObjectLinkedOpenHashSet<ServerPlayer> oldTrackerCandidates = this.lastTrackerCandidates;
+             this.lastTrackerCandidates = newTrackerCandidates;
+ 
+diff --git a/src/main/java/net/minecraft/server/level/ServerEntity.java b/src/main/java/net/minecraft/server/level/ServerEntity.java
+index 2bcd669435c1620b55cf959aded64f2b50da30dc..5fb97a3cc10daf69f6e1467896b5dd91b0f17110 100644
+--- a/src/main/java/net/minecraft/server/level/ServerEntity.java
++++ b/src/main/java/net/minecraft/server/level/ServerEntity.java
+@@ -63,7 +63,7 @@ public class ServerEntity {
+     private static final int FORCED_TELEPORT_PERIOD = 400;
+     private final ServerLevel level;
+     private final Entity entity;
+-    private final int updateInterval;
++    public final int updateInterval; // MultiPaper
+     private final boolean trackDelta;
+     private final Consumer<Packet<?>> broadcast;
+     private final VecDeltaCodec positionCodec = new VecDeltaCodec();
+@@ -78,6 +78,7 @@ public class ServerEntity {
+     private boolean wasOnGround;
+     @Nullable
+     private List<SynchedEntityData.DataValue<?>> trackedDataValues;
++    public int lastChangesSent; // MultiPaper
+     // CraftBukkit start
+     public final Set<ServerPlayerConnection> trackedPlayers; // Purpur - private -> public
+ 
+@@ -160,7 +161,7 @@ public class ServerEntity {
+             }
+         }
+ 
+-        if (this.forceStateResync || this.tickCount % this.updateInterval == 0 || this.entity.hasImpulse || this.entity.getEntityData().isDirty()) { // Paper - fix desync when a player is added to the tracker
++        if (this.forceStateResync || this.tickCount % this.updateInterval == 0 || this.entity.hasImpulse || this.entity.getEntityData().isDirty() || this.entity.sendChangesThisTick) { // Paper - fix desync when a player is added to the tracker // MultiPaper
+             int i;
+             int j;
+ 
+diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
+index b3804fcd6e8fcdb480651558759d5ffe4857ddaa..e50fb73f011bb2855c2be6bdd7ed86293e6752c3 100644
+--- a/src/main/java/net/minecraft/server/level/ServerLevel.java
++++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
+@@ -190,6 +190,7 @@ import it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet; // Paper
+ import puregero.multipaper.MultiPaper; // MultiPaper
+ import puregero.multipaper.MultiPaperChunkHandler; // MultiPaper
+ import puregero.multipaper.MultiPaperEntitiesHandler; // MultiPaper
++import puregero.multipaper.MultiPaperInactiveTracker; // MultiPaper
+ import puregero.multipaper.externalserverprotocol.SpawnUpdatePacket; // MultiPaper
+ import puregero.multipaper.externalserverprotocol.TimeUpdatePacket; // MultiPaper
+ 
+@@ -224,6 +225,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+     private final ObjectLinkedOpenHashSet<BlockEventData> blockEvents;
+     private final List<BlockEventData> blockEventsToReschedule;
+     private boolean handlingTick;
++    public final MultiPaperInactiveTracker inactiveTracker = new MultiPaperInactiveTracker(this); // MultiPaper
+     private final List<CustomSpawner> customSpawners;
+     @Nullable
+     private EndDragonFight dragonFight;
+@@ -1492,6 +1494,7 @@ this.blockTicks = new LevelTicks<>(this, this::isPositionTickingWithEntitiesLoad
+         //gameprofilerfiller.incrementCounter("tickNonPassenger"); // Purpur
+         if (isActive) { // Paper - EAR 2
+             TimingHistory.activatedEntityTicks++;
++        inactiveTracker.track(entity); // MultiPaper
+         entity.tick();
+         entity.postTick(); // CraftBukkit
+         } else { entity.inactiveTick(); } // Paper - EAR 2
+@@ -1532,6 +1535,7 @@ this.blockTicks = new LevelTicks<>(this, this::isPositionTickingWithEntitiesLoad
+                 //gameprofilerfiller.incrementCounter("tickPassenger"); // Purpur
+                 // Paper start - EAR 2
+                 if (isActive) {
++                inactiveTracker.track(passenger); // MultiPaper
+                 passenger.rideTick();
+                 passenger.postTick(); // CraftBukkit
+                 } else {
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index ebd7af1ccc9fc54d63396f22a01fb1082dc16887..11a9fff6e9be6bf5c7b2b19421a41df8dc2a7236 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -348,6 +348,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+     public float maxUpStep; // Purpur
+     public boolean noPhysics;
+     public final RandomSource random;
++    public boolean sendChangesThisTick = false; // MultiPaper
+     public int tickCount;
+     private int remainingFireTicks;
+     public boolean wasTouchingWater;
+diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
+index 45800dfbe389baa0ea6a0e565fbe267cf1e8d501..f7085a42ec7320cfba7758c3eee72252e5c42590 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
++++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
+@@ -194,6 +194,10 @@ public class MultiPaperEntitiesHandler {
+     }
+ 
+     public static void handleEntityUpdate(ExternalServerConnection connection, Entity entity, Packet<?> packet) {
++        if (entity.level() instanceof ServerLevel serverLevel) {
++            serverLevel.inactiveTracker.track(entity);
++        }
++
+         if (packet instanceof ClientboundMoveEntityPacket moveEntityPacket) {
+             VecDeltaCodec vecDeltaCodec = new VecDeltaCodec();
+             vecDeltaCodec.setBase(entity.position());
+diff --git a/src/main/java/puregero/multipaper/MultiPaperInactiveTracker.java b/src/main/java/puregero/multipaper/MultiPaperInactiveTracker.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..bdc544bd0cc908349c66b31aa178297140b36d55
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaperInactiveTracker.java
+@@ -0,0 +1,57 @@
++package puregero.multipaper;
++
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.entity.Entity;
++import puregero.multipaper.config.MultiPaperConfiguration;
++
++import java.util.Iterator;
++import java.util.LinkedList;
++import java.util.Queue;
++
++public class MultiPaperInactiveTracker {
++    private final ServerLevel level;
++    private final Queue<Entity> entitiesToSendChangesThisTick = new LinkedList<>();
++
++    public MultiPaperInactiveTracker(ServerLevel level) {
++        this.level = level;
++    }
++
++    public void track(Entity entity) {
++        if (MultiPaperConfiguration.get().optimizations.ticksPerInactiveEntityTracking > 1 && !entity.sendChangesThisTick && entity.tracker != null) {
++            entity.sendChangesThisTick = true;
++            entitiesToSendChangesThisTick.add(entity);
++        }
++    }
++
++    public boolean tick() {
++        int tickCount = level.getServer().getTickCount();
++        if (MultiPaperConfiguration.get().optimizations.ticksPerInactiveEntityTracking > 1 && tickCount % MultiPaperConfiguration.get().optimizations.ticksPerInactiveEntityTracking != 0) {
++            level.timings.trackerInactive.startTiming();
++            try {
++                Iterator<Entity> iterator = entitiesToSendChangesThisTick.iterator();
++                while (iterator.hasNext()) {
++                    Entity entity = iterator.next();
++
++                    if (entity.tracker == null) {
++                        entity.sendChangesThisTick = false;
++                        iterator.remove();
++                        continue;
++                    }
++
++                    if (tickCount - entity.tracker.serverEntity.lastChangesSent >= entity.tracker.serverEntity.updateInterval) {
++                        entity.tracker.serverEntity.lastChangesSent = tickCount;
++                        entity.tracker.updatePlayers(entity.getPlayersInTrackRange());
++                        entity.tracker.serverEntity.sendChanges();
++                        entity.sendChangesThisTick = false;
++                        iterator.remove();
++                    }
++                }
++            } finally {
++                level.timings.trackerInactive.stopTiming();
++            }
++            return true;
++        }
++
++        return false;
++    }
++}

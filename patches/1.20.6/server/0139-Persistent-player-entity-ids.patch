@@ -1,0 +1,109 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: officialplocki <officialplocki@gmx.de>
+Date: Sun, 20 Sep 2026 19:44:31 +0200
+Subject: [PATCH] Persistent player entity ids
+
+
+diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+index 831a7ba639e5dffeb77cbd0403c8ab0faaf754e1..43a3f204ecc0c4744e7aba0cd71a0f00af09206e 100644
+--- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
++++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+@@ -12,11 +12,13 @@ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.Iterator;
+ import java.util.List;
++import java.util.Map;
+ import java.util.Objects;
+ import java.util.Optional;
+ import java.util.OptionalInt;
+ import java.util.Set;
+ import java.util.UUID;
++import java.util.concurrent.ConcurrentHashMap;
+ import java.util.stream.Collectors;
+ import javax.annotation.Nullable;
+ import net.minecraft.BlockUtil;
+@@ -99,7 +101,6 @@ import net.minecraft.util.Mth;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.util.Unit;
+ import net.minecraft.world.damagesource.DamageSource;
+-import net.minecraft.world.damagesource.DamageSources;
+ import net.minecraft.world.effect.MobEffectInstance;
+ import net.minecraft.world.effect.MobEffects;
+ import net.minecraft.world.entity.Entity;
+@@ -196,6 +197,7 @@ import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
+ import org.bukkit.event.player.PlayerToggleSneakEvent;
+ import org.bukkit.inventory.MainHand;
+ import puregero.multipaper.*;
++import puregero.multipaper.config.MultiPaperConfiguration;
+ import puregero.multipaper.externalserverprotocol.*;
+ // CraftBukkit end
+ 
+@@ -281,6 +283,7 @@ public int containerUpdateDelay; // Paper // MultiPaper - make public
+     public boolean queueHealthUpdatePacket;
+     public net.minecraft.network.protocol.game.ClientboundSetHealthPacket queuedHealthUpdatePacket;
+     // Paper end - cancellable death event
++    public static final Map<UUID, Integer> persistentEntityIds = new ConcurrentHashMap<>(); // MultiPaper - persistent entity ids for players across servers
+     // Paper start - Optional per player mob spawns
+     public static final int MOBCATEGORY_TOTAL_ENUMS = net.minecraft.world.entity.MobCategory.values().length;
+     public final int[] mobCounts = new int[MOBCATEGORY_TOTAL_ENUMS]; // Paper
+@@ -362,6 +365,19 @@ public int containerUpdateDelay; // Paper // MultiPaper - make public
+ 
+     public ServerPlayer(MinecraftServer server, ServerLevel world, GameProfile profile, ClientInformation clientOptions) {
+         super(world, world.getSharedSpawnPos(), world.getSharedSpawnAngle(), profile);
++
++        // MultiPaper start - persistent entity ids for players across servers
++        if (MultiPaperConfiguration.get().syncSettings.persistentPlayerEntityIds) {
++            if (!(this instanceof ExternalPlayer)) {
++                Integer value = persistentEntityIds.get(profile.getId());
++                if (value != null) {
++                    setId(value);
++                }
++            }
++            persistentEntityIds.put(profile.getId(), getId());
++        }
++        // MultiPaper end - persistent entity ids for players across servers
++
+         this.chatVisibility = ChatVisiblity.FULL;
+         this.canChatColor = true;
+         this.lastActionTime = Util.getMillis();
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index 5b64680774ddd81ae1eff2a981bd9a505eb3a191..dcd1bc4b599e6710cca6fb3610dfd03464892f85 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -777,13 +777,17 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+     }
+     // Paper end
+ 
+-    public boolean equals(Object object) {
+-        return object instanceof Entity ? ((Entity) object).id == this.id : false;
+-    }
+-
+-    public int hashCode() {
+-        return this.id;
+-    }
++    // MultiPaper start - The Vanilla server never changes an entity's id from the randomly generated one, so we can use Java's built in equals and hashcode instead
++    // The Vanilla client does actually use these methods, but the server does not
++    // Since MultiPaper does change the entity's id, these can return true when the entities are not actually equal
++//    public boolean equals(Object object) {
++//        return object instanceof Entity ? ((Entity) object).id == this.id : false;
++//    }
++//
++//    public int hashCode() {
++//        return this.id;
++//    }
++    // MultiPaper end
+ 
+     public void remove(Entity.RemovalReason reason) {
+         // CraftBukkit start - add Bukkit remove cause
+diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
+index 3cd1f7adfb5dd29328c21083e755ad92dd67b390..3dcc25bc6b6d98050e854fc6d22f7aef28edd20e 100644
+--- a/src/main/java/puregero/multipaper/ExternalPlayer.java
++++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
+@@ -54,6 +54,7 @@ public class ExternalPlayer extends ServerPlayer {
+ 
+         if (MultiPaperConfiguration.get().syncSettings.syncEntityIds) {
+             setId(entityId);
++            if (MultiPaperConfiguration.get().syncSettings.persistentPlayerEntityIds) persistentEntityIds.put(gameProfile.getId(), getId());// MultiPaper - persistent entity ids for players across servers
+             // Update cache hast sets with our new entity id
+             this.cachedSingleHashSet = new com.destroystokyo.paper.util.misc.PooledLinkedHashSets.PooledObjectLinkedOpenHashSet<>(this);
+             this.cachedSingleMobDistanceMap = new com.destroystokyo.paper.util.PooledHashSets.PooledObjectLinkedOpenHashSet<>(this);

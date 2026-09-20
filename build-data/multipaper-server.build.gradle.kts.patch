@@ -1,0 +1,51 @@
+--- a/purpur-server/build.gradle.kts
++++ b/purpur-server/build.gradle.kts
+@@ -35,6 +_,24 @@
+     activeFork = purpur
+     // Purpur end - Rebrand
+ 
++    // MultiPaper start
++    val multipaper = forks.register("multipaper") {
++        forks = purpur
++        upstream.patchRepo("paperServer") {
++            upstreamRepo = purpur.patchedRepo("paperServer")
++            patchesDir = rootDirectory.dir("patches/${providers.gradleProperty("purpurVersion").getOrElse("1.21.11")}/server")
++            outputDir = rootDirectory.dir("paper-server")
++        }
++        upstream.patchDir("purpurServer") {
++            upstreamPath = "purpur-server"
++            excludes = setOf("src/minecraft", "paper-patches", "minecraft-patches", "build.gradle.kts", "build.gradle.kts.patch")
++            patchesDir = rootDirectory.dir("patches/${providers.gradleProperty("purpurVersion").getOrElse("1.21.11")}/server/purpur")
++            outputDir = rootDirectory.dir("purpur-server")
++        }
++    }
++    activeFork = multipaper
++    // MultiPaper end
++
+     spigot {
+         enabled = true
+         buildDataRef = "17f77cee7117ab9d6175f088ae8962bfd04e61a9"
+@@ -122,10 +_,14 @@
+     main {
+         java { srcDir("../paper-server/src/main/java") }
+         resources { srcDir("../paper-server/src/main/resources") }
++        java { srcDir("../purpur-server/src/main/java") } // MultiPaper
++        resources { srcDir("../purpur-server/src/main/resources") } // MultiPaper
+     }
+     test {
+         java { srcDir("../paper-server/src/test/java") }
+         resources { srcDir("../paper-server/src/test/resources") }
++        java { srcDir("../purpur-server/src/test/java") } // MultiPaper
++        resources { srcDir("../purpur-server/src/test/resources") } // MultiPaper
+     }
+ }
+ val log4jPlugins = sourceSets.create("log4jPlugins") {
+@@ -154,7 +_,7 @@
+ }
+ 
+ dependencies {
+-    implementation(project(":purpur-api")) // Purpur
++    implementation(project(":multipaper-api")) // Purpur // MultiPaper
+     implementation("ca.spottedleaf:concurrentutil:0.0.8")
+     implementation("org.jline:jline-terminal-ffm:3.27.1") // use ffm on java 22+
+     implementation("org.jline:jline-terminal-jni:3.27.1") // fall back to jni on java 21

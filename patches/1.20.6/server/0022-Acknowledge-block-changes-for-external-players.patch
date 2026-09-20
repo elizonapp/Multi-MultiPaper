@@ -1,0 +1,83 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: officialplocki <officialplocki@gmx.de>
+Date: Sun, 20 Sep 2026 18:58:20 +0200
+Subject: [PATCH] Acknowledge block changes for external players
+
+
+diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+index ff257ef0c0420165db2fc8d453117006187a5ade..ae10c733a2df67bba18b0b23f332d609433f4a57 100644
+--- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
++++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+@@ -250,6 +250,7 @@ import org.bukkit.inventory.InventoryView;
+ import org.bukkit.inventory.SmithingInventory;
+ import puregero.multipaper.ExternalPlayer;
+ import puregero.multipaper.MultiPaper;
++import puregero.multipaper.MultiPaperAckBlockChangesHandler; // MultiPaper
+ import puregero.multipaper.externalserverprotocol.PlayerRemovePacket;
+ // CraftBukkit end
+ 
+@@ -265,7 +266,7 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
+     public ServerPlayer player;
+     public final PlayerChunkSender chunkSender;
+     private int tickCount;
+-    private int ackBlockChangesUpTo = -1;
++    public int ackBlockChangesUpTo = -1; // MultiPaper - make public
+     // CraftBukkit start - multithreaded fields
+     private final AtomicInteger chatSpamTickCount = new AtomicInteger();
+     private final java.util.concurrent.atomic.AtomicInteger tabSpamLimiter = new java.util.concurrent.atomic.AtomicInteger(); // Paper - configurable tab spam limits
+@@ -2186,6 +2187,7 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
+             throw new IllegalArgumentException("Expected packet sequence nr >= 0");
+         } else {
+             this.ackBlockChangesUpTo = Math.max(sequence, this.ackBlockChangesUpTo);
++            MultiPaperAckBlockChangesHandler.onAckNeeded(this.player); // MultiPaper
+         }
+     }
+ 
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index 95d19c2bdcc8e692cbdfac5fa09c2132f34dc138..ea63d650445e5c1222ecacf4633bc22fc3593271 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -120,6 +120,8 @@ public class MultiPaper {
+                 // Ignore - plugins doing async things (HuskSync specifically)
+             }
+         });
++
++        MultiPaperAckBlockChangesHandler.tick();
+     }
+ 
+     public static void sendTickTime(long time, double tps) {
+diff --git a/src/main/java/puregero/multipaper/MultiPaperAckBlockChangesHandler.java b/src/main/java/puregero/multipaper/MultiPaperAckBlockChangesHandler.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..c71c4e08696dc749f47b477df43d74d3d148c26b
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaperAckBlockChangesHandler.java
+@@ -0,0 +1,29 @@
++package puregero.multipaper;
++
++import it.unimi.dsi.fastutil.objects.ObjectLinkedOpenHashSet;
++import net.minecraft.network.protocol.game.ClientboundBlockChangedAckPacket;
++import net.minecraft.server.level.ServerPlayer;
++
++import java.util.Set;
++
++public class MultiPaperAckBlockChangesHandler {
++    private final static Set<ExternalPlayer> ackBlockChangesQueue = new ObjectLinkedOpenHashSet<>(); // Linked set for faster iteration
++
++    public static void tick() {
++        if (!ackBlockChangesQueue.isEmpty()) {
++            for (ExternalPlayer player : ackBlockChangesQueue) {
++                if (player.connection.ackBlockChangesUpTo > -1) {
++                    player.connection.send(new ClientboundBlockChangedAckPacket(player.connection.ackBlockChangesUpTo));
++                    player.connection.ackBlockChangesUpTo = -1;
++                }
++            }
++            ackBlockChangesQueue.clear();
++        }
++    }
++
++    public static void onAckNeeded(ServerPlayer player) {
++        if (player instanceof ExternalPlayer externalPlayer) {
++            ackBlockChangesQueue.add(externalPlayer);
++        }
++    }
++}

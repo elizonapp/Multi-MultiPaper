@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Wed, 29 Dec 2021 15:01:38 +1000
+Subject: [PATCH] Add temporary debug logs for checking if a chunk can be
+ loaded twice
+
+
+diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
+index 0d16e09a4988353c486fa28310f08700302b88bb..a7ba77c1aa940a27b2ac3246e9d7927d35b47383 100644
+--- a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
++++ b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
+@@ -945,7 +945,16 @@ public class LevelChunk extends ChunkAccess {
+ 
+     }
+ 
++    // MultiPaper start - temporary debug logs for checking if a chunk can be loaded twice
++    private boolean hasBeenLoadedBefore = false;
+     public void setLoaded(boolean loadedToWorld) {
++        if (loaded) {
++            if (hasBeenLoadedBefore) {
++                new Exception("Loading a chunk that's already been loaded " + level.getWorld().getName() + "," + chunkPos.x + "," + chunkPos.z).printStackTrace();
++            }
++            hasBeenLoadedBefore = true;
++        }
++    // MultiPaper end - temporary debug logs for checking if a chunk can be loaded twice
+         this.loaded = loadedToWorld;
+     }
+ 

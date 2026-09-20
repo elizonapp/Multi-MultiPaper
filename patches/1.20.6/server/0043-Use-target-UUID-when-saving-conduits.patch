@@ -1,0 +1,18 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Tue, 14 Dec 2021 13:41:18 +1000
+Subject: [PATCH] Use target UUID when saving conduits
+
+
+diff --git a/src/main/java/net/minecraft/world/level/block/entity/ConduitBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/ConduitBlockEntity.java
+index ff6fea842ca80c2ba51693fe62e5b74f9affdc19..829c21eb59b224c15bf8b61867417baf6fedc5c8 100644
+--- a/src/main/java/net/minecraft/world/level/block/entity/ConduitBlockEntity.java
++++ b/src/main/java/net/minecraft/world/level/block/entity/ConduitBlockEntity.java
+@@ -66,6 +66,7 @@ public class ConduitBlockEntity extends BlockEntity {
+     @Override
+     protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registryLookup) {
+         super.saveAdditional(nbt, registryLookup);
++        if (this.destroyTargetUUID != null) nbt.putUUID("Target", this.destroyTargetUUID); // MultiPaper - Save UUID
+         if (this.destroyTarget != null) {
+             nbt.putUUID("Target", this.destroyTarget.getUUID());
+         }

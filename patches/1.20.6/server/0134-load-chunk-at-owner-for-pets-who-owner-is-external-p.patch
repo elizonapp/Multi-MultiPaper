@@ -1,0 +1,34 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: officialplocki <officialplocki@gmx.de>
+Date: Sun, 20 Sep 2026 19:41:51 +0200
+Subject: [PATCH] load chunk at owner for pets who owner is external player
+
+
+diff --git a/src/main/java/net/minecraft/world/entity/ai/goal/FollowOwnerGoal.java b/src/main/java/net/minecraft/world/entity/ai/goal/FollowOwnerGoal.java
+index edd29c2f4d0151d512618115a8fb4b7423171491..c2a5182061c912c4ac6cb2def42c663624702a16 100644
+--- a/src/main/java/net/minecraft/world/entity/ai/goal/FollowOwnerGoal.java
++++ b/src/main/java/net/minecraft/world/entity/ai/goal/FollowOwnerGoal.java
+@@ -17,7 +17,9 @@ import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
+ // CraftBukkit start
+ import org.bukkit.Location;
+ import org.bukkit.craftbukkit.event.CraftEventFactory;
++import org.bukkit.craftbukkit.entity.CraftPlayer; // MultiPaper
+ import org.bukkit.event.entity.EntityTeleportEvent;
++import puregero.multipaper.ExternalPlayer; // MultiPaper
+ // CraftBukkit end
+ 
+ public class FollowOwnerGoal extends Goal {
+@@ -142,6 +144,13 @@ public class FollowOwnerGoal extends Goal {
+     }
+ 
+     private boolean canTeleportTo(BlockPos pos) {
++        // MultiPaper start - load chunks at owner for pets who owner is external player.
++        if (owner instanceof ExternalPlayer externalPlayer) {
++            // use bukkit api to load that chunk aysnc
++            CraftPlayer player = externalPlayer.getBukkitEntity();
++            player.getWorld().getChunkAtAsync(player.getLocation());
++        }
++        // MultiPaper end
+         PathType pathtype = WalkNodeEvaluator.getPathTypeStatic((Mob) this.tamable, pos);
+ 
+         if (pathtype != PathType.WALKABLE) {

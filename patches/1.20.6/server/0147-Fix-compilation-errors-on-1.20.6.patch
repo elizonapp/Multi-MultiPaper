@@ -1,0 +1,1477 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: officialplocki <officialplocki@gmx.de>
+Date: Sun, 20 Sep 2026 20:11:15 +0200
+Subject: [PATCH] Fix compilation errors on 1.20.6
+
+
+diff --git a/src/main/java/io/papermc/paper/configuration/WorldConfiguration.java b/src/main/java/io/papermc/paper/configuration/WorldConfiguration.java
+index 16e5e79ce8a8b4eb37882002c1d9fed3d1bf8299..ff2bba59026ed9094f54c0bd07aef998ebb6552b 100644
+--- a/src/main/java/io/papermc/paper/configuration/WorldConfiguration.java
++++ b/src/main/java/io/papermc/paper/configuration/WorldConfiguration.java
+@@ -5,6 +5,7 @@ import com.google.common.collect.Table;
+ import com.mojang.logging.LogUtils;
+ import io.papermc.paper.configuration.legacy.MaxEntityCollisionsInitializer;
+ import io.papermc.paper.configuration.legacy.RequiresSpigotInitialization;
++import io.papermc.paper.configuration.legacy.SpawnLoadedRangeInitializer;
+ import io.papermc.paper.configuration.mapping.MergeMap;
+ import io.papermc.paper.configuration.serializer.NbtPathSerializer;
+ import io.papermc.paper.configuration.transformation.world.FeatureSeedsGeneration;
+diff --git a/src/main/java/net/minecraft/network/FriendlyByteBuf.java b/src/main/java/net/minecraft/network/FriendlyByteBuf.java
+index 3ef35b49861e3eb4d3575c7cc3afb436279dde87..9cb594aa3f65f86ca15e39ed2acea5fd2cced9df 100644
+--- a/src/main/java/net/minecraft/network/FriendlyByteBuf.java
++++ b/src/main/java/net/minecraft/network/FriendlyByteBuf.java
+@@ -567,7 +567,7 @@ public class FriendlyByteBuf extends ByteBuf {
+ 
+     @Nullable
+     public CompoundTag readNbt() {
+-        return this.readNbt(new NbtAccounter(maxNbtSize)); // MultiPaper
++        return (CompoundTag) this.readNbt(NbtAccounter.create(maxNbtSize)); // MultiPaper
+     }
+ 
+     @Nullable
+diff --git a/src/main/java/net/minecraft/network/syncher/SynchedEntityData.java b/src/main/java/net/minecraft/network/syncher/SynchedEntityData.java
+index 80198c7411ec5afc0a35a9a580531585b3fb3e29..f417052db81cea3ca6bb696f672c1b83507ad6a8 100644
+--- a/src/main/java/net/minecraft/network/syncher/SynchedEntityData.java
++++ b/src/main/java/net/minecraft/network/syncher/SynchedEntityData.java
+@@ -73,17 +73,16 @@ public class SynchedEntityData {
+         return datawatcher_item;
+         */
+         // Paper start - array backed synched entity data
+-        final int id = key.getId();
++        final int id = key.id();
+ 
+-        if (id < 0 || id >= this.itemsArray.length) {
++        if (id < 0 || id >= this.itemsById.length) {
+             return null;
+         }
+ 
+-        return (DataItem<T>) this.itemsArray[id];
++        return (DataItem<T>) this.itemsById[id];
+         // Paper end
+         // Spigot end
+     }
+-    }
+ 
+     public <T> T get(EntityDataAccessor<T> data) {
+         return this.getItem(data).getValue();
+@@ -199,7 +198,7 @@ public class SynchedEntityData {
+     @NotNull
+     public List<SynchedEntityData.DataValue<?>> getAll() {
+         List<SynchedEntityData.DataValue<?>> list = new ArrayList<>();
+-        for (DataItem<?> dataItem : this.itemsById.values()) {
++        for (DataItem<?> dataItem : this.itemsById) {
+             list.add(dataItem.value());
+         }
+ 
+diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
+index 2dd7799e096f32cd25665e2097856022c7658738..199bb20f55c22c78cb23844271661c4558aea151 100644
+--- a/src/main/java/net/minecraft/server/level/ChunkMap.java
++++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
+@@ -1,7 +1,6 @@
+ package net.minecraft.server.level;
+ 
+ import co.aikar.timings.Timing; // Paper
+-import com.destroystokyo.paper.io.PaperFileIOThread;
+ import com.google.common.collect.ImmutableList;
+ import com.google.common.collect.ImmutableList.Builder;
+ import com.google.common.collect.Iterables;
+diff --git a/src/main/java/net/minecraft/server/level/ServerChunkCache.java b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
+index c59cc13854032b673585c5ecac05a364dbe305ac..65e7c2dcb08c93ec489683f5b5e5db188da834a4 100644
+--- a/src/main/java/net/minecraft/server/level/ServerChunkCache.java
++++ b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
+@@ -9,6 +9,7 @@ import java.util.Arrays;
+ import java.util.Iterator;
+ import java.util.List;
+ import java.util.Objects;
++import java.util.Optional;
+ import java.util.concurrent.CompletableFuture;
+ import java.util.concurrent.Executor;
+ import java.util.function.BooleanSupplier;
+diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+index 43a3f204ecc0c4744e7aba0cd71a0f00af09206e..b13b2f14a322f75466d09249737fc2acbd43f1b3 100644
+--- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
++++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+@@ -289,7 +289,7 @@ public int containerUpdateDelay; // Paper // MultiPaper - make public
+     public final int[] mobCounts = new int[MOBCATEGORY_TOTAL_ENUMS]; // Paper
+     // Paper end - Optional per player mob spawns
+     public final int[] mobBackoffCounts = new int[MOBCATEGORY_TOTAL_ENUMS]; // Paper - per player mob count backoff
+-    public com.destroystokyo.paper.util.PooledHashSets.PooledObjectLinkedOpenHashSet<ServerPlayer> cachedSingleMobDistanceMap; // MultiPaper - make not final
++    public com.destroystokyo.paper.util.misc.PooledLinkedHashSets.PooledObjectLinkedOpenHashSet<ServerPlayer> cachedSingleMobDistanceMap; // MultiPaper - make not final
+ 
+     // CraftBukkit start
+     public CraftPlayer.TransferCookieConnection transferCookieConnection;
+@@ -476,8 +476,7 @@ public int containerUpdateDelay; // Paper // MultiPaper - make public
+         this.adventure$displayName = net.kyori.adventure.text.Component.text(this.getScoreboardName()); // Paper
+         this.bukkitPickUpLoot = true;
+         this.maxHealthCache = this.getMaxHealth();
+-        this.cachedSingleMobDistanceMap = new com.destroystokyo.paper.util.PooledHashSets.PooledObjectLinkedOpenHashSet<>(this); // Paper
+-        this.spawnInvulnerableTime = world.purpurConfig.playerSpawnInvulnerableTicks; // Purpur
++        this.cachedSingleMobDistanceMap = new com.destroystokyo.paper.util.misc.PooledLinkedHashSets.PooledObjectLinkedOpenHashSet<>(this); // Paper
+         enderChestInventory.addListener(new MultiPaperEnderChestHandler(this)); // MultiPaper
+     }
+ 
+@@ -1457,7 +1456,6 @@ public int containerUpdateDelay; // Paper // MultiPaper - make public
+             PlayerCreatePacket.sendPlayer(this, serversToCreatePlayerOn.toArray(ExternalServerConnection[]::new));
+             // MultiPaper end
+ 
+-	    this.spawnInvulnerableTime = worldserver.purpurConfig.playerSpawnInvulnerableTicks; // Purpur
+             return this;
+         }
+     }
+diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+index 28a92b13c3dd89420ed12eac58743c089b84aadd..85497459087149a11cef4eb88a9091b5b99f97c0 100644
+--- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
++++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+@@ -2254,7 +2254,7 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
+             this.player.getInventory().selected = packet.getSlot();
+             this.player.resetLastActionTime();
+             if (MultiPaper.isRealPlayer(this.player)) MultiPaper.broadcastPacketToExternalServers(this.player, new PlayerActionPacket(this.player, packet)); // MultiPaper
+-            else this.player.detectEquipmentUpdates(); // MultiPaper
++            else this.player.detectEquipmentUpdatesPublic(); // MultiPaper
+         } else {
+             ServerGamePacketListenerImpl.LOGGER.warn("{} tried to set an invalid carried item", this.player.getName().getString());
+             this.disconnect("Invalid hotbar selection (Hacking?)", org.bukkit.event.player.PlayerKickEvent.Cause.ILLEGAL_ACTION); // CraftBukkit // Paper - kick event cause
+diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
+index 47042e0e82189c24f7ad4610e8df8c400c936ccd..77e15caca217bf7f2a96ad21701e07bb606d4837 100644
+--- a/src/main/java/net/minecraft/server/players/PlayerList.java
++++ b/src/main/java/net/minecraft/server/players/PlayerList.java
+@@ -7,6 +7,7 @@ import com.mojang.authlib.GameProfile;
+ import com.mojang.logging.LogUtils;
+ import com.mojang.serialization.DataResult;
+ import com.mojang.serialization.Dynamic;
++import io.papermc.paper.adventure.PaperAdventure;
+ import java.io.File;
+ import java.net.SocketAddress;
+ import java.nio.file.Path;
+@@ -42,6 +43,7 @@ import net.minecraft.network.chat.MutableComponent;
+ import net.minecraft.network.chat.OutgoingChatMessage;
+ import net.minecraft.network.chat.PlayerChatMessage;
+ import net.minecraft.network.protocol.Packet;
++import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
+ import net.minecraft.network.protocol.common.ClientboundUpdateTagsPacket;
+ import net.minecraft.network.protocol.game.ClientboundChangeDifficultyPacket;
+ import net.minecraft.network.protocol.game.ClientboundEntityEventPacket;
+@@ -58,6 +60,7 @@ import net.minecraft.network.protocol.game.ClientboundSetBorderSizePacket;
+ import net.minecraft.network.protocol.game.ClientboundSetBorderWarningDelayPacket;
+ import net.minecraft.network.protocol.game.ClientboundSetBorderWarningDistancePacket;
+ import net.minecraft.network.protocol.game.ClientboundSetCarriedItemPacket;
++import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket;
+ import net.minecraft.network.protocol.game.ClientboundSetChunkCacheRadiusPacket;
+ import net.minecraft.network.protocol.game.ClientboundSetDefaultSpawnPositionPacket;
+ import net.minecraft.network.protocol.game.ClientboundSetExperiencePacket;
+diff --git a/src/main/java/net/minecraft/server/players/StoredUserList.java b/src/main/java/net/minecraft/server/players/StoredUserList.java
+index 37c760514e5bb65202107e9073eaaa11cd2ea7cc..a0b0e695c317f7bb7a55c303fc417f186665eee6 100644
+--- a/src/main/java/net/minecraft/server/players/StoredUserList.java
++++ b/src/main/java/net/minecraft/server/players/StoredUserList.java
+@@ -24,6 +24,7 @@ import javax.annotation.Nullable;
+ import net.minecraft.Util;
+ import net.minecraft.util.GsonHelper;
+ import org.slf4j.Logger;
++import puregero.multipaper.MultiPaper;
+ 
+ public abstract class StoredUserList<K, V extends StoredUserEntry<K>> {
+ 
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index 445ae4f59b87b982684931ea4692f1bfcf3b5af3..fb9d6e986db2a7c24ac73926a837b5af05436a57 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -11,6 +11,7 @@ import it.unimi.dsi.fastutil.objects.Object2DoubleArrayMap;
+ import it.unimi.dsi.fastutil.objects.Object2DoubleMap;
+ import java.util.ArrayList;
+ import java.util.Arrays;
++import java.util.Collections;
+ import java.util.Comparator;
+ import java.util.HashSet;
+ import java.util.Iterator;
+@@ -1982,7 +1983,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+                     for (int currY = minYIterate; currY < maxYIterate; ++currY) {
+                         net.minecraft.world.level.chunk.LevelChunkSection section = sections[(currY >> 4) - minSection];
+ 
+-                        if (section == null || section.hasOnlyAir() || section.fluidStateCount == 0) { // if no fluids, nothing in this section
++                        if (section == null || section.hasOnlyAir()) { // if no fluids, nothing in this section
+                             // empty
+                             // skip to next section
+                             currY = (currY & ~(15)) + 15; // increment by 15: iterator loop increments by the extra one
+diff --git a/src/main/java/net/minecraft/world/entity/LightningBolt.java b/src/main/java/net/minecraft/world/entity/LightningBolt.java
+index 5b992305062eb06311cc71fa8ec4d599bd456845..c3b6cc3da05ccb289635a6fcfc3208acca1c43f9 100644
+--- a/src/main/java/net/minecraft/world/entity/LightningBolt.java
++++ b/src/main/java/net/minecraft/world/entity/LightningBolt.java
+@@ -282,7 +282,7 @@ public class LightningBolt extends Entity {
+         this.seed = nbt.getLong("Seed");
+         this.flashes = nbt.getInt("Flashes");
+         this.life = nbt.getInt("Life");
+-        this.isSilent = nbt.getBoolean("IsSilent");
++        this.setSilent(nbt.getBoolean("IsSilent"));
+ 
+         if (nbt.hasUUID("Cause")) {
+             this.cause = this.level().getServer().getPlayerList().getPlayer(nbt.getUUID("Cause"));
+@@ -297,7 +297,7 @@ public class LightningBolt extends Entity {
+         nbt.putLong("Seed", this.seed);
+         nbt.putInt("Flashes", this.flashes);
+         nbt.putInt("Life", this.life);
+-        nbt.putBoolean("IsSilent", this.isSilent);
++        nbt.putBoolean("IsSilent", this.isSilent());
+ 
+         if (this.cause != null) {
+             nbt.putUUID("Cause", this.cause.getUUID());
+diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
+index 832efae8d8989fb1e804c13e8f1f8086baada715..3727e6309da75c01f7b80d9fd8659cdf1ea88d51 100644
+--- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
++++ b/src/main/java/net/minecraft/world/entity/LivingEntity.java
+@@ -1488,9 +1488,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+         // MultiPaper start
+         ExternalServerConnection owner = MultiPaperEntityInteractHandler.getOwner(this);
+         if (owner != null) {
+-            owner.send(new HurtEntityPacket(this, source, amount, CraftEventFactory.entityDamage, CraftEventFactory.blockDamage));
+-            CraftEventFactory.entityDamage = null;
+-            CraftEventFactory.blockDamage = null;
++            owner.send(new HurtEntityPacket(this, source, amount, source.getCustomEventDamager(), source.getDirectBlock()));
+             return false;
+         }
+         // MultiPaper end
+diff --git a/src/main/java/net/minecraft/world/entity/projectile/ThrownEnderpearl.java b/src/main/java/net/minecraft/world/entity/projectile/ThrownEnderpearl.java
+index 5f0779ea34dc6cb20358373c6bd03f0de6f6c253..47f262215323202a20c3461247b3cf6cc921fc09 100644
+--- a/src/main/java/net/minecraft/world/entity/projectile/ThrownEnderpearl.java
++++ b/src/main/java/net/minecraft/world/entity/projectile/ThrownEnderpearl.java
+@@ -54,7 +54,7 @@ public class ThrownEnderpearl extends ThrowableItemProjectile {
+             this.level().addParticle(ParticleTypes.PORTAL, this.getX(), this.getY() + this.random.nextDouble() * 2.0D, this.getZ(), this.random.nextGaussian(), 0.0D, this.random.nextGaussian());
+         }
+ 
+-        if (!this.level().isClientSide && !this.isRemoved() && MultiPaper.isChunkLocal((ServerLevel) this.level(), blockPosition)) { // MultiPaper - Fix ender pearls on external entities
++        if (!this.level().isClientSide && !this.isRemoved() && MultiPaper.isChunkLocal((ServerLevel) this.level(), this.blockPosition())) { // MultiPaper - Fix ender pearls on external entities
+             Entity entity = this.getOwner();
+ 
+             if (entity instanceof ServerPlayer) {
+diff --git a/src/main/java/net/minecraft/world/item/ItemStack.java b/src/main/java/net/minecraft/world/item/ItemStack.java
+index 52964641ff311b2b0ba17c8701cad752a7e649b5..cdc938fa37072c2555796aee0855cd685cc7963d 100644
+--- a/src/main/java/net/minecraft/world/item/ItemStack.java
++++ b/src/main/java/net/minecraft/world/item/ItemStack.java
+@@ -232,10 +232,6 @@ public final class ItemStack implements DataComponentHolder {
+     private PatchedDataComponentMap components;
+     @Nullable
+     private Entity entityRepresentation;
+-    @Nullable
+-    private AdventureModeCheck adventureBreakCheck;
+-    @Nullable
+-    private AdventureModeCheck adventurePlaceCheck;
+     // MultiPaper start
+     public boolean dirty = true;
+     static { EMPTY.dirty = false; }
+diff --git a/src/main/java/net/minecraft/world/level/block/piston/PistonBaseBlock.java b/src/main/java/net/minecraft/world/level/block/piston/PistonBaseBlock.java
+index 26c71a2a7fda9b877ab02f9b78910534b1df1d0f..ab89cfc2d709f485165088b4195014dd9b9a3ee5 100644
+--- a/src/main/java/net/minecraft/world/level/block/piston/PistonBaseBlock.java
++++ b/src/main/java/net/minecraft/world/level/block/piston/PistonBaseBlock.java
+@@ -5,6 +5,8 @@ import com.google.common.collect.Maps;
+ import com.mojang.serialization.Codec;
+ import com.mojang.serialization.MapCodec;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
++import java.util.AbstractList;
++import java.util.HashSet;
+ import java.util.Iterator;
+ import java.util.List;
+ import java.util.Map;
+diff --git a/src/main/java/net/minecraft/world/level/block/state/BlockBehaviour.java b/src/main/java/net/minecraft/world/level/block/state/BlockBehaviour.java
+index 1a5388cc253b9a5f4bb89e6e57ae9d89e0d72fcb..500c5c1ca6789c7c1735b9260dc8c4f18c1e822b 100644
+--- a/src/main/java/net/minecraft/world/level/block/state/BlockBehaviour.java
++++ b/src/main/java/net/minecraft/world/level/block/state/BlockBehaviour.java
+@@ -62,7 +62,7 @@ import net.minecraft.world.level.block.Blocks;
+ import net.minecraft.world.level.block.CartographyTableBlock;
+ import net.minecraft.world.level.block.ChestBlock;
+ import net.minecraft.world.level.block.CraftingTableBlock;
+-import net.minecraft.world.level.block.EnchantmentTableBlock;
++import net.minecraft.world.level.block.EnchantingTableBlock;
+ import net.minecraft.world.level.block.EnderChestBlock;
+ import net.minecraft.world.level.block.EntityBlock;
+ import net.minecraft.world.level.block.FletchingTableBlock;
+@@ -1263,7 +1263,7 @@ public abstract class BlockBehaviour implements FeatureElement {
+             // Open these menus on the player's server
+             if ((player instanceof ExternalPlayer externalPlayer) && (
+                     this.getBlock() instanceof CraftingTableBlock ||
+-                    this.getBlock() instanceof EnchantmentTableBlock ||
++                    this.getBlock() instanceof EnchantingTableBlock ||
+                     this.getBlock() instanceof EnderChestBlock ||
+                     this.getBlock() instanceof AnvilBlock ||
+                     this.getBlock() instanceof LoomBlock ||
+diff --git a/src/main/java/net/minecraft/world/level/portal/PortalForcer.java b/src/main/java/net/minecraft/world/level/portal/PortalForcer.java
+index 07fc8ec0d1624ce2660e76507eee3097a9d0b277..45e949aac5a696746d20e9bb2b35330cf424fd34 100644
+--- a/src/main/java/net/minecraft/world/level/portal/PortalForcer.java
++++ b/src/main/java/net/minecraft/world/level/portal/PortalForcer.java
+@@ -58,7 +58,9 @@ public class PortalForcer {
+             villageplace,
+             type -> type.is(PoiTypes.NETHER_PORTAL),
+             (BlockPos pos) -> {
+-net.minecraft.world.level.chunk.ChunkAccess lowest = this.level.getChunk(pos.getX() >> 4, pos.getZ() >> 4, net.minecraft.world.level.chunk.ChunkStatus.FULL); // MultiPaper - For some reason empty was reseting the chunks nearby the portal
++                net.minecraft.world.level.chunk.ChunkAccess lowest = this.level.getChunk(pos.getX() >> 4, pos.getZ() >> 4, net.minecraft.world.level.chunk.status.ChunkStatus.FULL); // MultiPaper - For some reason empty was reseting the chunks nearby the portal
++                if (!lowest.getStatus().isOrAfter(net.minecraft.world.level.chunk.status.ChunkStatus.FULL)
++                    && (lowest.getBelowZeroRetrogen() == null || !lowest.getBelowZeroRetrogen().targetStatus().isOrAfter(net.minecraft.world.level.chunk.status.ChunkStatus.SPAWN))) {
+                     // why would we generate the chunk?
+                     return false;
+                 }
+diff --git a/src/main/java/net/minecraft/world/level/saveddata/SavedData.java b/src/main/java/net/minecraft/world/level/saveddata/SavedData.java
+index 252d3e5ed3fe069f35112d488aeac05d7c1b1653..66b808c79214e1cbf792052bc89de55e75252e6d 100644
+--- a/src/main/java/net/minecraft/world/level/saveddata/SavedData.java
++++ b/src/main/java/net/minecraft/world/level/saveddata/SavedData.java
+@@ -46,7 +46,9 @@ public abstract class SavedData {
+ 
+             Runnable writeRunnable = () -> { // Paper - Write SavedData IO async
+             try {
+-MultiPaper.writeData(file.getPath(), compoundTag); // NbtIo.writeCompressed(compoundTag, file.toPath()); // MultiPaper
++                MultiPaper.writeData(file.getPath(), compoundTag); // NbtIo.writeCompressed(compoundTag, file.toPath()); // MultiPaper
++            } catch (IOException var4) {
++                LOGGER.error("Could not save data {}", this, var4);
+             }
+             }; // Paper - Write SavedData IO async
+ 
+diff --git a/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java b/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
+index e7df19ea84975a70e22fb39e2fd68a1f1fd0100a..f7b9eee8b39721276a1f2c202b1b50178e6675a4 100644
+--- a/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
++++ b/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
+@@ -160,7 +160,7 @@ CompoundTag var9;
+ 
+     // MultiPaper start - save a PersistentBase
+     public void save(String id, SavedData savedData) {
+-        savedData.save(this.getDataFile(id));
++        savedData.save(this.getDataFile(id), this.registries);
+     }
+     // MultiPaper end
+ }
+diff --git a/src/main/java/net/minecraft/world/level/storage/LevelStorageSource.java b/src/main/java/net/minecraft/world/level/storage/LevelStorageSource.java
+index 62457c513234d0993a84f2abddbe17c524bef4a2..3c9533033ca1cf71f7b42068b26da79efa2e87e9 100644
+--- a/src/main/java/net/minecraft/world/level/storage/LevelStorageSource.java
++++ b/src/main/java/net/minecraft/world/level/storage/LevelStorageSource.java
+@@ -309,6 +309,7 @@ static CompoundTag readLevelDataTagRaw(Path path) throws IOException {
+ 
+ private LevelSummary readLevelSummary(LevelStorageSource.LevelDirectory save, boolean locked) {
+         Path path = save.dataFile();
++        if (Files.exists(path, new LinkOption[0])) {
+             try {
+                 if (Files.isSymbolicLink(path)) {
+                     List<ForbiddenSymlinkInfo> list = this.worldDirValidator.validateSymlink(path);
+diff --git a/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java b/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java
+index 0ed07273d58d383e4935734ec38a93e1c318dd19..11cfc839e0d8fdc3ffd6cf03f2f4ef04f1c6262a 100644
+--- a/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java
++++ b/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java
+@@ -123,13 +123,6 @@ public class PlayerDataStorage {
+ 
+         try {
+             nbttagcompound = MultiPaper.readPlayer(session.levelDirectory.path().getFileName().toString(), player.getStringUUID()); // MultiPaper
+-
+-            if (false) { // MultiPaper
+-                return this.load(player.getName().getString(), player.getStringUUID()).map((nbttagcompound1) -> {
+-                    nbttagcompound = nbttagcompound1;
+-                    return nbttagcompound1;
+-                });
+-            } // MultiPaper
+         } catch (Exception exception) {
+             PlayerDataStorage.LOGGER.warn("Failed to load player data for {}", player.getName().getString());
+         }
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+index 5378e8aa4ccc0090a9a9f3814d5582f9ae86a7d9..cf7a6f72a449485b4360c8ede544fc78b86200de 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+@@ -21,6 +21,7 @@ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.Date;
+ import java.util.HashMap;
++import java.util.concurrent.ConcurrentHashMap;
+ import java.util.HashSet;
+ import java.util.LinkedHashMap;
+ import java.util.LinkedList;
+diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
+index 3dcc25bc6b6d98050e854fc6d22f7aef28edd20e..f2e5fef6e05d3afb19bedcc91251f2df252c8b46 100644
+--- a/src/main/java/puregero/multipaper/ExternalPlayer.java
++++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
+@@ -8,8 +8,10 @@ import net.minecraft.network.protocol.Packet;
+ import net.minecraft.network.protocol.PacketFlow;
+ import net.minecraft.network.protocol.game.*;
+ import net.minecraft.network.syncher.EntityDataAccessor;
++import net.minecraft.server.level.ClientInformation;
+ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.server.network.CommonListenerCookie;
+ import net.minecraft.server.network.ServerGamePacketListenerImpl;
+ import net.minecraft.world.damagesource.DamageSource;
+ import net.minecraft.world.level.GameType;
+@@ -47,7 +49,7 @@ public class ExternalPlayer extends ServerPlayer {
+     }
+ 
+     public ExternalPlayer(ExternalServerConnection externalServerConnection, GameProfile gameProfile, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address, CompoundTag saveData, int entityId) {
+-        super(((CraftServer) Bukkit.getServer()).getServer(), ((CraftWorld) Bukkit.getWorld(world)).getHandle(), gameProfile);
++        super(((CraftServer) Bukkit.getServer()).getServer(), ((CraftWorld) Bukkit.getWorld(world)).getHandle(), gameProfile, ClientInformation.createDefault());
+         MultiPaperInventoryHandler.updatingInventory = true;
+         this.load(saveData);
+         MultiPaperInventoryHandler.updatingInventory = false;
+@@ -57,7 +59,7 @@ public class ExternalPlayer extends ServerPlayer {
+             if (MultiPaperConfiguration.get().syncSettings.persistentPlayerEntityIds) persistentEntityIds.put(gameProfile.getId(), getId());// MultiPaper - persistent entity ids for players across servers
+             // Update cache hast sets with our new entity id
+             this.cachedSingleHashSet = new com.destroystokyo.paper.util.misc.PooledLinkedHashSets.PooledObjectLinkedOpenHashSet<>(this);
+-            this.cachedSingleMobDistanceMap = new com.destroystokyo.paper.util.PooledHashSets.PooledObjectLinkedOpenHashSet<>(this);
++            this.cachedSingleMobDistanceMap = new com.destroystokyo.paper.util.misc.PooledLinkedHashSets.PooledObjectLinkedOpenHashSet<>(this);
+         }
+ 
+         this.externalServerConnection = externalServerConnection;
+@@ -65,7 +67,7 @@ public class ExternalPlayer extends ServerPlayer {
+         this.isRealPlayer = true;
+         this.valid = true;
+         this.onGround = true;
+-        connection = new ServerGamePacketListenerImpl(getServer(), new ExternalPlayerConnection(PacketFlow.CLIENTBOUND), this);
++        connection = new ServerGamePacketListenerImpl(getServer(), new ExternalPlayerConnection(PacketFlow.CLIENTBOUND), this, CommonListenerCookie.createInitial(gameProfile, false));
+         setPos(x, y, z);
+         setYRot(yaw);
+         setXRot(pitch);
+@@ -87,7 +89,7 @@ public class ExternalPlayer extends ServerPlayer {
+         initInventoryMenu();
+         sendPackets = true;
+         gameMode.changeGameModeForPlayer(gamemode);
+-        detectEquipmentUpdates();
++        detectEquipmentUpdatesPublic();
+         this.server.getProfileCache().add(this.getGameProfile());
+     }
+ 
+@@ -145,9 +147,7 @@ public class ExternalPlayer extends ServerPlayer {
+ 
+     @Override
+     public boolean hurt(DamageSource source, float amount) {
+-        externalServerConnection.send(new HurtEntityPacket(this, source, amount, CraftEventFactory.entityDamage, CraftEventFactory.blockDamage));
+-        CraftEventFactory.entityDamage = null;
+-        CraftEventFactory.blockDamage = null;
++        externalServerConnection.send(new HurtEntityPacket(this, source, amount, source.getCustomEventDamager(), source.getDirectBlock()));
+         return true;
+     }
+ }
+diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
+index d966830d09daa16012d9189626593c7a96e9497e..d94b4d271e07ed46749f761f6500af538e734f0a 100644
+--- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
++++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
+@@ -11,7 +11,10 @@ import io.netty.util.internal.SystemPropertyUtil;
+ import net.minecraft.network.*;
+ import net.minecraft.network.protocol.Packet;
+ import net.minecraft.network.protocol.PacketFlow;
++import net.minecraft.SharedConstants;
++import net.minecraft.network.protocol.handshake.ClientIntent;
+ import net.minecraft.network.protocol.handshake.ClientIntentionPacket;
++import net.minecraft.network.protocol.handshake.HandshakeProtocols;
+ import net.minecraft.server.dedicated.DedicatedServer;
+ import net.minecraft.server.level.ServerPlayer;
+ import org.apache.logging.log4j.LogManager;
+@@ -91,9 +94,8 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
+ 
+         channel.pipeline()
+                 .addLast("prepender", new MessageLengthEncoder())
+-                .addLast("encoder", new PacketEncoder(PacketFlow.SERVERBOUND));
+-        channel.attr(Connection.ATTRIBUTE_PROTOCOL).set(ConnectionProtocol.HANDSHAKING);
+-        channel.writeAndFlush(new ClientIntentionPacket(address + "\00" + secret, port, ConnectionProtocol.STATUS))
++                .addLast("encoder", new PacketEncoder(HandshakeProtocols.SERVERBOUND));
++        channel.writeAndFlush(new ClientIntentionPacket(SharedConstants.getCurrentVersion().getProtocolVersion(), address + "\00" + secret, port, ClientIntent.STATUS))
+                 .addListener(future -> {
+                     if (future.isSuccess()) {
+                         setupPipeline();
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index 8d44fec87abcfaf02919e99f33cb174a150f2b98..69d0c364de059a367a2eab74582f9eea6c7841e0 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -9,12 +9,13 @@ import net.minecraft.world.level.block.entity.BlockEntity;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.server.MinecraftServer;
+ import net.minecraft.nbt.CompoundTag;
++import net.minecraft.nbt.NbtAccounter;
+ import net.minecraft.nbt.NbtIo;
+ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.level.ChunkPos;
+ import net.minecraft.world.level.chunk.ChunkAccess;
+-import net.minecraft.world.level.chunk.ChunkStatus;
++import net.minecraft.world.level.chunk.status.ChunkStatus;
+ import net.minecraft.world.level.chunk.ImposterProtoChunk;
+ import net.minecraft.world.level.chunk.LevelChunk;
+ import net.minecraft.world.level.saveddata.maps.MapIndex;
+@@ -430,7 +431,7 @@ public class MultiPaper {
+     public static CompoundTag readLevel(String world) throws IOException {
+         byte[] data = getConnection().sendAndAwaitReply(new ReadLevelMessage(world), DataMessageReply.class).thenApply(message -> message.data).join();
+ 
+-        return data.length == 0 ? null : NbtIo.readCompressed(new ByteArrayInputStream(data));
++        return data.length == 0 ? null : NbtIo.readCompressed(new ByteArrayInputStream(data), NbtAccounter.unlimitedHeap());
+     }
+ 
+     public static void writeLevel(String world, CompoundTag compoundTag) throws IOException {
+@@ -460,7 +461,7 @@ public class MultiPaper {
+     public static CompoundTag readPlayer(String world, String uuid) throws IOException {
+         byte[] data = getConnection().sendAndAwaitReply(new ReadPlayerMessage(world, uuid), DataMessageReply.class).thenApply(message -> message.data).join();
+ 
+-        return data.length == 0 ? null : NbtIo.readCompressed(new ByteArrayInputStream(data));
++        return data.length == 0 ? null : NbtIo.readCompressed(new ByteArrayInputStream(data), NbtAccounter.unlimitedHeap());
+     }
+ 
+     public static void writePlayer(String world, String uuid, CompoundTag compoundTag) throws IOException {
+diff --git a/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
+index 71d18b7b85c4df18b8d7e3fc959be67653278993..a18fb39e79191f10f4362d7a5a49cb38b56f1301 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
++++ b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
+@@ -160,7 +160,7 @@ public class MultiPaperChunkHandler {
+             } else if (packet instanceof ClientboundBlockEntityDataPacket update) {
+                 BlockEntity existingBlockEntity = blockUpdateChunk.getBlockEntity(update.getPos());
+                 if (existingBlockEntity != null && existingBlockEntity.minecraftKey.toString().equals(update.getTag().getString("id"))) {
+-                    existingBlockEntity.load(update.getTag());
++                    existingBlockEntity.loadWithComponents(update.getTag(), level.registryAccess());
+                     holder.vanillaChunkHolder.blockChanged(update.getPos());
+                 } else if (!blockUpdateChunk.getBlockState(update.getPos()).hasBlockEntity() && depth < 1) {
+                     MCUtil.scheduleTask(1, () -> handleBlockUpdate(world, packet, depth + 1));
+diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+index 617098f160c0460509e5b109c25f4b5bb3faa0aa..65e615024cea46e46400079284b05494cf2bb0a6 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
++++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+@@ -19,7 +19,7 @@ import net.minecraft.server.MinecraftServer;
+ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.server.level.ServerPlayer;
+ import net.minecraft.world.entity.Entity;
+-import net.minecraft.world.level.chunk.ChunkStatus;
++import net.minecraft.world.level.chunk.status.ChunkStatus;
+ import net.minecraft.world.level.chunk.LevelChunk;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
+diff --git a/src/main/java/puregero/multipaper/MultiPaperEnderChestHandler.java b/src/main/java/puregero/multipaper/MultiPaperEnderChestHandler.java
+index a56c3727c3590037134af2fd8b17d821b35c3387..413618be4ef4de8d24d7a6569e5daea5f99e7322 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperEnderChestHandler.java
++++ b/src/main/java/puregero/multipaper/MultiPaperEnderChestHandler.java
+@@ -49,9 +49,8 @@ public class MultiPaperEnderChestHandler implements ContainerListener {
+                 sentItems[i] = item.copy();
+ 
+                 if (broadcastChanges) {
+-                    CompoundTag itemToSend = new CompoundTag();
++                    CompoundTag itemToSend = (CompoundTag) item.save(player.level().registryAccess());
+                     itemToSend.putInt("Slot", i);
+-                    item.save(itemToSend);
+                     items.add(itemToSend);
+                 }
+             }
+@@ -68,9 +67,8 @@ public class MultiPaperEnderChestHandler implements ContainerListener {
+         ListTag items = new ListTag();
+         for (int i = 0; i < player.getEnderChestInventory().getContainerSize(); i++) {
+             ItemStack item = player.getEnderChestInventory().getItem(i);
+-            CompoundTag itemToSend = new CompoundTag();
++            CompoundTag itemToSend = (CompoundTag) item.save(player.level().registryAccess());
+             itemToSend.putInt("Slot", i);
+-            item.save(itemToSend);
+             items.add(itemToSend);
+         }
+ 
+diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
+index ca2ce74fee9400679d991bbe4f410318369afca2..e5ae855361d58ff62223d441052dd00d83aee9d8 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
++++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
+@@ -236,7 +236,7 @@ public class MultiPaperEntitiesHandler {
+             entity.getEntityData().assignValues(setEntityDataPacket.packedItems());
+             if (entity instanceof LivingEntity livingEntity) {
+                 for (SynchedEntityData.DataValue<?> item : setEntityDataPacket.packedItems()) {
+-                    if (item.id() == LivingEntity.DATA_HEALTH_ID.getId()) {
++                    if (item.id() == LivingEntity.DATA_HEALTH_ID.id()) {
+                         // Dumb CraftBukkit needs us to set the health using setHealth instead of simply updating the entity data
+                         livingEntity.setHealth((Float) item.value());
+                     }
+@@ -247,7 +247,7 @@ public class MultiPaperEntitiesHandler {
+             if (entity.tracker != null) {
+                 entity.tracker.seenBy.forEach(serverplayerconnection -> {
+                     if (MultiPaper.isRealPlayer(serverplayerconnection.getPlayer())) {
+-                        entity.getEntityData().refresh(serverplayerconnection.getPlayer());
++                        serverplayerconnection.send(new ClientboundSetEntityDataPacket(entity.getId(), entity.getEntityData().getAll()));
+                     }
+                 });
+             }
+@@ -257,10 +257,10 @@ public class MultiPaperEntitiesHandler {
+             }
+         } else if (packet instanceof ClientboundUpdateAttributesPacket updateAttributesPacket) {
+             for (ClientboundUpdateAttributesPacket.AttributeSnapshot snapshot : updateAttributesPacket.getValues()) {
+-                AttributeInstance instance = ((LivingEntity) entity).getAttribute(snapshot.getAttribute());
+-                instance.setBaseValue(snapshot.getBase());
++                AttributeInstance instance = ((LivingEntity) entity).getAttribute(snapshot.attribute());
++                instance.setBaseValue(snapshot.base());
+                 instance.removeModifiers();
+-                for (AttributeModifier modifier : snapshot.getModifiers()) {
++                for (AttributeModifier modifier : snapshot.modifiers()) {
+                     instance.addPermanentModifier(modifier);
+                 }
+             }
+@@ -280,11 +280,11 @@ public class MultiPaperEntitiesHandler {
+                 trackedEntity.broadcast(new ClientboundEntityEventPacket(entity, entityEventPacket.getEventId()));
+             }
+         } else if (packet instanceof ClientboundSetEquipmentPacket setEquipmentPacket) {
+-            for (Pair<EquipmentSlot, ItemStack> pair : setEquipmentPacket.getSlots()) {
+-                entity.setItemSlot(pair.getFirst(), pair.getSecond());
+-            }
+             if (entity instanceof LivingEntity livingEntity) {
+-                livingEntity.detectEquipmentUpdates();
++                for (Pair<EquipmentSlot, ItemStack> pair : setEquipmentPacket.getSlots()) {
++                    livingEntity.setItemSlot(pair.getFirst(), pair.getSecond());
++                }
++                livingEntity.detectEquipmentUpdatesPublic();
+             }
+         } else {
+             LOGGER.warn("Unhandled packet " + packet);
+diff --git a/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
+index d75e71f1118718e493e179a7c70b7b881515ed29..024944e4c3e30a4a61f85012e86ba3a8509c045f 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
++++ b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
+@@ -1,6 +1,7 @@
+ package puregero.multipaper;
+ 
+ import io.papermc.paper.chunk.system.scheduling.NewChunkHolder;
++import net.minecraft.core.component.DataComponents;
+ import net.minecraft.nbt.CompoundTag;
+ import net.minecraft.nbt.ListTag;
+ import net.minecraft.network.protocol.Packet;
+@@ -251,7 +252,7 @@ public class MultiPaperInventoryHandler {
+         if (itemToRemove.isEmpty()) return;
+ 
+         ItemStack item = getter.get();
+-        if (ItemStack.isSameItemSameTags(item, itemToRemove)) {
++        if (ItemStack.isSameItemSameComponents(item, itemToRemove)) {
+             int itemCount = item.getCount();
+             if (item.getCount() < itemToRemove.getCount()) {
+                 item.setCount(0);
+@@ -266,26 +267,13 @@ public class MultiPaperInventoryHandler {
+     }
+ 
+     private static boolean isSameItemSameTagIgnoringDurability(ItemStack left, ItemStack right) {
+-        boolean hasLeftDurability = false;
+-        boolean hasRightDurability = false;
+-        int leftDurability = left.getDamageValue();
+-        int rightDurability = right.getDamageValue();
+-
+-        if (left.getTag() != null && left.getTag().contains("Damage")) {
+-            hasLeftDurability = true;
+-            left.getTag().remove("Damage");
+-        }
+-        if (right.getTag() != null) {
+-            hasRightDurability = true;
+-            right.getTag().remove("Damage");
+-        }
+-
+-        boolean result = ItemStack.isSameItemSameTags(left, right);
++        ItemStack leftCopy = left.copy();
++        ItemStack rightCopy = right.copy();
+ 
+-        if (hasLeftDurability) left.getTag().putInt("Damage", leftDurability);
+-        if (hasRightDurability) right.getTag().putInt("Damage", rightDurability);
++        leftCopy.remove(DataComponents.DAMAGE);
++        rightCopy.remove(DataComponents.DAMAGE);
+ 
+-        return result;
++        return ItemStack.isSameItemSameComponents(leftCopy, rightCopy);
+     }
+ 
+     /**
+@@ -323,14 +311,12 @@ public class MultiPaperInventoryHandler {
+             ListTag items = new ListTag();
+             for (int i = 0; i < inventoryComponent.size(); i++) {
+                 if (inventoryComponent.dirty[i] || inventoryComponent.get(i).dirty) {
+-                    CompoundTag item = new CompoundTag();
++                    CompoundTag item = (CompoundTag) inventoryComponent.get(i).save(player.level().registryAccess());
+                     item.putInt("Slot", i);
+-                    inventoryComponent.get(i).save(item);
+                     items.add(item);
+ 
+                     if (!MultiPaper.isRealPlayer(player)) {
+-                        CompoundTag replacingItem = new CompoundTag();
+-                        inventoryComponent.lastItems.get(i).save(replacingItem);
++                        CompoundTag replacingItem = (CompoundTag) inventoryComponent.lastItems.get(i).save(player.level().registryAccess());
+                         item.put("Replacing", replacingItem);
+                     }
+ 
+@@ -344,7 +330,7 @@ public class MultiPaperInventoryHandler {
+                 CompoundTag itemsRoot = new CompoundTag();
+                 itemsRoot.put("items", items);
+                 MultiPaper.broadcastPacketToExternalServers(player, new PlayerInventoryUpdatePacket(player, inventoryComponent.name, itemsRoot));
+-                player.detectEquipmentUpdates();
++                player.detectEquipmentUpdatesPublic();
+             }
+         }
+     }
+@@ -357,9 +343,8 @@ public class MultiPaperInventoryHandler {
+         }) {
+             ListTag items = new ListTag();
+             for (int i = 0; i < inventoryComponent.size(); i++) {
+-                CompoundTag item = new CompoundTag();
++                CompoundTag item = (CompoundTag) inventoryComponent.get(i).save(player.level().registryAccess());
+                 item.putInt("Slot", i);
+-                inventoryComponent.get(i).save(item);
+                 items.add(item);
+             }
+ 
+diff --git a/src/main/java/puregero/multipaper/MultiPaperPlayerHandler.java b/src/main/java/puregero/multipaper/MultiPaperPlayerHandler.java
+index 1b826e5e3194728467fdeb4cf0d87a250caec461..3dbdcc3aa8f2567201afb4dccb4589e49554e466 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperPlayerHandler.java
++++ b/src/main/java/puregero/multipaper/MultiPaperPlayerHandler.java
+@@ -1,6 +1,6 @@
+ package puregero.multipaper;
+ 
+-import net.minecraft.network.protocol.game.ServerboundClientInformationPacket;
++import net.minecraft.network.protocol.common.ServerboundClientInformationPacket;
+ import net.minecraft.network.protocol.game.ServerboundPlayerAbilitiesPacket;
+ import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
+ import net.minecraft.server.level.ServerPlayer;
+diff --git a/src/main/java/puregero/multipaper/commands/MPDebugCommand.java b/src/main/java/puregero/multipaper/commands/MPDebugCommand.java
+index 98bf0440c530ede1a046f9c29731afc8e8747522..5c7e1fbcb1dadbcab507b6eba68c4319c415eca7 100644
+--- a/src/main/java/puregero/multipaper/commands/MPDebugCommand.java
++++ b/src/main/java/puregero/multipaper/commands/MPDebugCommand.java
+@@ -98,7 +98,7 @@ public class MPDebugCommand extends Command implements Runnable {
+                     // Chunk has no owner, this shouldn't be possible if the player's right up in its face
+                     color = Color.WHITE;
+                 }
+-                player.spawnParticle(Particle.REDSTONE, vec.x, vec.y, vec.z, 1, new Particle.DustOptions(color, 1));
++                player.spawnParticle(Particle.DUST, vec.x, vec.y, vec.z, 1, new Particle.DustOptions(color, 1));
+             }
+         }
+     }
+diff --git a/src/main/java/puregero/multipaper/config/MultiPaperConfigurationLoader.java b/src/main/java/puregero/multipaper/config/MultiPaperConfigurationLoader.java
+index 18c3cf68df39065dcb99eb11199e2ccf0cd096cf..941a2adc13cbe7d0d8f3ec32f5193ce3155ce165 100644
+--- a/src/main/java/puregero/multipaper/config/MultiPaperConfigurationLoader.java
++++ b/src/main/java/puregero/multipaper/config/MultiPaperConfigurationLoader.java
+@@ -2,7 +2,7 @@ package puregero.multipaper.config;
+ 
+ import io.papermc.paper.configuration.ConfigurationLoaders;
+ import io.papermc.paper.configuration.ConfigurationPart;
+-import io.papermc.paper.configuration.InnerClassFieldDiscoverer;
++import io.papermc.paper.configuration.mapping.InnerClassFieldDiscoverer;
+ import io.papermc.paper.configuration.constraint.Constraint;
+ import io.papermc.paper.configuration.constraint.Constraints;
+ import org.spongepowered.configurate.BasicConfigurationNode;
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/AddItemToContainerPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/AddItemToContainerPacket.java
+index 77e8fd3417e25ed9f12e865413c635aad9f580a8..80963b02bdba416b6256834a4adf5dbf73fcdf10 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/AddItemToContainerPacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/AddItemToContainerPacket.java
+@@ -45,7 +45,7 @@ public class AddItemToContainerPacket extends ExternalServerPacket {
+         slot = in.readByte();
+ 
+         try {
+-            itemStack = ItemStack.of(MultiPaper.nbtFromBytes(in.readByteArray()));
++            itemStack = ItemStack.parseOptional(net.minecraft.server.MinecraftServer.getServer().registryAccess(), MultiPaper.nbtFromBytes(in.readByteArray()));
+         } catch (IOException e) {
+             throw new RuntimeException(e);
+         }
+@@ -58,7 +58,7 @@ public class AddItemToContainerPacket extends ExternalServerPacket {
+         out.writeByte(slot);
+ 
+         try {
+-            out.writeByteArray(MultiPaper.nbtToBytes(itemStack.save(new CompoundTag())));
++            out.writeByteArray(MultiPaper.nbtToBytes((CompoundTag) itemStack.save(net.minecraft.server.MinecraftServer.getServer().registryAccess())));
+         } catch (IOException e) {
+             throw new RuntimeException(e);
+         }
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/AddItemToEntityContainerPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/AddItemToEntityContainerPacket.java
+index b21bf599543d1a2fb2f44d22a8b9ebc17d05c96b..f2d066a50138f5d3f458d38f3be40b37c82ba2e4 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/AddItemToEntityContainerPacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/AddItemToEntityContainerPacket.java
+@@ -41,7 +41,7 @@ public class AddItemToEntityContainerPacket extends ExternalServerPacket {
+         slot = in.readByte();
+ 
+         try {
+-            itemStack = ItemStack.of(MultiPaper.nbtFromBytes(in.readByteArray()));
++            itemStack = ItemStack.parseOptional(net.minecraft.server.MinecraftServer.getServer().registryAccess(), MultiPaper.nbtFromBytes(in.readByteArray()));
+         } catch (IOException e) {
+             throw new RuntimeException(e);
+         }
+@@ -54,7 +54,7 @@ public class AddItemToEntityContainerPacket extends ExternalServerPacket {
+         out.writeByte(slot);
+ 
+         try {
+-            out.writeByteArray(MultiPaper.nbtToBytes(itemStack.save(new CompoundTag())));
++            out.writeByteArray(MultiPaper.nbtToBytes((CompoundTag) itemStack.save(net.minecraft.server.MinecraftServer.getServer().registryAccess())));
+         } catch (IOException e) {
+             throw new RuntimeException(e);
+         }
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/AddPendingMessagePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/AddPendingMessagePacket.java
+index 93cf364b675577642ddcb404c8766f083db8e257..c8d82c0962ae1f50199078b593f802d54245d1a0 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/AddPendingMessagePacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/AddPendingMessagePacket.java
+@@ -3,12 +3,14 @@ package puregero.multipaper.externalserverprotocol;
+ import net.minecraft.Util;
+ import net.minecraft.network.FriendlyByteBuf;
+ import net.minecraft.network.chat.Component;
++import net.minecraft.network.chat.ComponentSerialization;
+ import net.minecraft.network.chat.FilterMask;
+ import net.minecraft.network.chat.LastSeenMessages;
+ import net.minecraft.network.chat.MessageSignature;
+ import net.minecraft.network.chat.PlayerChatMessage;
+ import net.minecraft.network.chat.SignedMessageBody;
+ import net.minecraft.network.chat.SignedMessageLink;
++import net.minecraft.network.codec.ByteBufCodecs;
+ import net.minecraft.server.MinecraftServer;
+ import net.minecraft.server.level.ServerPlayer;
+ import org.apache.logging.log4j.LogManager;
+@@ -93,33 +95,33 @@ public class AddPendingMessagePacket extends ExternalServerPacket {
+     }
+ 
+     public AddPendingMessagePacket(FriendlyByteBuf in) {
+-        this.uuids = in.readList(FriendlyByteBuf::readUUID);
++        this.uuids = in.readList(buf -> buf.readUUID());
+ 
+         this.index = in.readInt();
+         this.sender = in.readUUID();
+-        this.sessionId = in.readNullable(FriendlyByteBuf::readUUID);
++        this.sessionId = in.readNullable(buf -> buf.readUUID());
+         this.messageSignature = in.readNullable(MessageSignature::read);
+         this.content = in.readUtf();
+         this.timeStamp = in.readInstant();
+         this.salt = in.readLong();
+         this.lastSeen = in.readList(MessageSignature::read);
+-        this.unsignedContent = in.readNullable(FriendlyByteBuf::readComponent);
++        this.unsignedContent = ComponentSerialization.TRUSTED_CONTEXT_FREE_STREAM_CODEC.apply(ByteBufCodecs::optional).decode(in).orElse(null);
+         this.filterMask = FilterMask.read(in);
+     }
+ 
+     @Override
+     public void write(FriendlyByteBuf out) {
+-        out.writeCollection(this.uuids, FriendlyByteBuf::writeUUID);
++        out.writeCollection(this.uuids, (buf, uuid) -> buf.writeUUID(uuid));
+ 
+         out.writeInt(this.index);
+         out.writeUUID(this.sender);
+-        out.writeNullable(this.sessionId, FriendlyByteBuf::writeUUID);
++        out.writeNullable(this.sessionId, (buf, uuid) -> buf.writeUUID(uuid));
+         out.writeNullable(this.messageSignature, MessageSignature::write);
+         out.writeUtf(this.content);
+         out.writeInstant(this.timeStamp);
+         out.writeLong(this.salt);
+         out.writeCollection(this.lastSeen, MessageSignature::write);
+-        out.writeNullable(this.unsignedContent, FriendlyByteBuf::writeComponent);
++        ComponentSerialization.TRUSTED_CONTEXT_FREE_STREAM_CODEC.apply(ByteBufCodecs::optional).encode(out, java.util.Optional.ofNullable(this.unsignedContent));
+         FilterMask.write(out, this.filterMask);
+     }
+ 
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/AdvancementGrantProgressPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/AdvancementGrantProgressPacket.java
+index 553ee381cddc87c6ceff5c886dc8d843f56b895c..f121f254f1dc5225f6f4739c5f9a7e7a944594c5 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/AdvancementGrantProgressPacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/AdvancementGrantProgressPacket.java
+@@ -1,6 +1,6 @@
+ package puregero.multipaper.externalserverprotocol;
+ 
+-import net.minecraft.advancements.Advancement;
++import net.minecraft.advancements.AdvancementHolder;
+ import net.minecraft.network.FriendlyByteBuf;
+ import net.minecraft.resources.ResourceLocation;
+ import net.minecraft.server.MinecraftServer;
+@@ -18,9 +18,9 @@ public class AdvancementGrantProgressPacket extends ExternalServerPacket {
+     private final String advancement;
+     private final String criterion;
+ 
+-    public AdvancementGrantProgressPacket(ServerPlayer player, Advancement advancement, String criterion) {
++    public AdvancementGrantProgressPacket(ServerPlayer player, AdvancementHolder advancement, String criterion) {
+         this.uuid = player.getUUID();
+-        this.advancement = advancement.getId().toString();
++        this.advancement = advancement.id().toString();
+         this.criterion = criterion;
+     }
+ 
+@@ -43,13 +43,13 @@ public class AdvancementGrantProgressPacket extends ExternalServerPacket {
+             updatingAdvancements = true;
+             ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
+             if (player != null) {
+-                player.getAdvancements().award(player.getServer().getAdvancements().getAdvancement(new ResourceLocation(advancement)), criterion);
++                player.getAdvancements().award(player.getServer().getAdvancements().get(new ResourceLocation(advancement)), criterion);
+             }
+             updatingAdvancements = false;
+         });
+     }
+ 
+-    public static void onAdvancementGrantProgress(ServerPlayer player, Advancement advancement, String criterion) {
++    public static void onAdvancementGrantProgress(ServerPlayer player, AdvancementHolder advancement, String criterion) {
+         if (!updatingAdvancements) {
+             MultiPaper.broadcastPacketToExternalServers(new AdvancementGrantProgressPacket(player, advancement, criterion));
+         }
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateEffectPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateEffectPacket.java
+index c1b8aac44d4fe00b52099ae0a708ef2bd76ecd4b..d980f38ff7de8c9d3e1f287b1aa3d820adbedd80 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateEffectPacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateEffectPacket.java
+@@ -26,7 +26,7 @@ public class EntityUpdateEffectPacket extends ExternalServerPacket {
+         this.uuid = entity.getUUID();
+         this.remove = remove;
+ 
+-        CompoundTag tag = effect.save(new CompoundTag());
++        CompoundTag tag = (CompoundTag) effect.save();
+ 
+         try {
+             this.data = MultiPaper.nbtToBytes(tag);
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
+index 4e7d66ad3a0eb32e0bdc1c14d659fc9fafc00609..799b98f9e3fa9dae8d0f3628d6d52878780b81a0 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
+@@ -48,10 +48,7 @@ public class EntityUpdatePacket extends ExternalServerPacket {
+         world = in.readUUID();
+         uuid = in.readUUID();
+ 
+-        ByteBuf buf = Unpooled.wrappedBuffer(in.readByteArray());
+-        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
+-        int packetId = friendlyByteBuf.readVarInt();
+-        packet = ConnectionProtocol.PLAY.createPacket(PacketFlow.CLIENTBOUND, packetId, friendlyByteBuf);
++        packet = puregero.multipaper.util.PacketSerializer.readClientbound(in);
+         this.chunkPos = in.readLong();
+     }
+ 
+@@ -60,15 +57,9 @@ public class EntityUpdatePacket extends ExternalServerPacket {
+         out.writeUUID(world);
+         out.writeUUID(uuid);
+ 
+-        ConnectionProtocol protocol = ConnectionProtocol.getProtocolForPacket(packet);
+-        Integer id = protocol.getPacketId(PacketFlow.CLIENTBOUND, packet);
+-        ByteBuf buf = Unpooled.buffer();
+-        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
+-        friendlyByteBuf.writeVarInt(id);
+         threadsWritingUpdatePackets.add(Thread.currentThread().getId());
+-        packet.write(friendlyByteBuf);
++        puregero.multipaper.util.PacketSerializer.writeClientbound(out, packet);
+         threadsWritingUpdatePackets.remove(Thread.currentThread().getId());
+-        out.writeByteArray(buf.array());
+         out.writeLong(this.chunkPos);
+     }
+ 
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java
+index a8bc60d3cddaaee3d23c0693f7f5b720cab4ac0a..db016f1f3ecf730aef2a4feef4de66fd64a7752e 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java
+@@ -58,10 +58,7 @@ public class EntityUpdateWithDependenciesPacket extends ExternalServerPacket {
+             uuids[i] = in.readUUID();
+         }
+ 
+-        ByteBuf buf = Unpooled.wrappedBuffer(in.readByteArray());
+-        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
+-        int packetId = friendlyByteBuf.readVarInt();
+-        packet = ConnectionProtocol.PLAY.createPacket(PacketFlow.CLIENTBOUND, packetId, friendlyByteBuf);
++        packet = puregero.multipaper.util.PacketSerializer.readClientbound(in);
+         this.chunkPos = in.readLong();
+     }
+ 
+@@ -75,13 +72,7 @@ public class EntityUpdateWithDependenciesPacket extends ExternalServerPacket {
+             out.writeUUID(uuid);
+         }
+ 
+-        ConnectionProtocol protocol = ConnectionProtocol.getProtocolForPacket(packet);
+-        Integer id = protocol.getPacketId(PacketFlow.CLIENTBOUND, packet);
+-        ByteBuf buf = Unpooled.buffer();
+-        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
+-        friendlyByteBuf.writeVarInt(id);
+-        packet.write(friendlyByteBuf);
+-        out.writeByteArray(buf.array());
++        puregero.multipaper.util.PacketSerializer.writeClientbound(out, packet);
+         out.writeLong(this.chunkPos);
+     }
+ 
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
+index 2441eb28b97f930d4ec798c5b35954b497aae877..1ff8c1cd98062012464783d48d865752b1bec87b 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
+@@ -146,7 +146,7 @@ public class HelloPacket extends ExternalServerPacket {
+         }
+ 
+         for (int i = 0; i < 19; ++i) {
+-            Objective scoreboardobjective = scoreboard.getDisplayObjective(i);
++            Objective scoreboardobjective = scoreboard.getDisplayObjective(net.minecraft.world.scores.DisplaySlot.BY_ID.apply(i));
+ 
+             if (scoreboardobjective != null && !set.contains(scoreboardobjective)) {
+                 List<Packet<?>> list = scoreboard.getStartTrackingPackets(scoreboardobjective);
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/HurtEntityPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/HurtEntityPacket.java
+index 207e2596ec3525308d9143531dba1e180bb2fb83..f3748ff33f6aa5ec05fbf728f932f9e77efff43f 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/HurtEntityPacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/HurtEntityPacket.java
+@@ -105,13 +105,14 @@ public class HurtEntityPacket extends ExternalServerPacket {
+                 Entity entityDamage = entityDamageUuid == null ? null : level.getEntity(entityDamageUuid);
+                 Block blockDamage = blockDamagePos == null ? null : CraftBlock.at(level, blockDamagePos);
+ 
+-                CraftEventFactory.entityDamage = entityDamage;
+-                CraftEventFactory.blockDamage = blockDamage;
++                if (entityDamage != null) {
++                    source = source.customEventDamager(entityDamage);
++                }
++                if (blockDamage != null) {
++                    source = source.directBlock(blockDamage);
++                }
+ 
+                 entity.hurt(source, amount);
+-
+-                CraftEventFactory.entityDamage = null;
+-                CraftEventFactory.blockDamage = null;
+             } catch (IOException e) {
+                 throw new RuntimeException(e);
+             }
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/MobSetNavigationGoalPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/MobSetNavigationGoalPacket.java
+index 164752ea0477a422534ddbb2a0f3870c630e31d6..a05c36e065ea293da5f5c81e0ff5fdc511203a54 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/MobSetNavigationGoalPacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/MobSetNavigationGoalPacket.java
+@@ -59,8 +59,8 @@ public class MobSetNavigationGoalPacket extends ExternalServerPacket {
+ 
+             Entity entity = level.getEntity(uuid);
+             if (entity instanceof Mob mob) {
+-                mob.goalSelector.getRunningGoals().forEach(WrappedGoal::stop);
+-                mob.targetSelector.getRunningGoals().forEach(WrappedGoal::stop);
++                mob.goalSelector.getAvailableGoals().stream().filter(WrappedGoal::isRunning).forEach(WrappedGoal::stop);
++                mob.targetSelector.getAvailableGoals().stream().filter(WrappedGoal::isRunning).forEach(WrappedGoal::stop);
+                 mob.getNavigation().moveTo(mob.getNavigation().createPath(goal, 0), speed);
+             } else {
+                 LOGGER.warn("Couldn't find mob " + uuid + " for navigation goal");
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PistonMoveBlockEndPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PistonMoveBlockEndPacket.java
+index 091f2a6664c911e7eabf319719e2b3ba4dc78458..88a0ca3d7c221e128fc42a534e0ace09f3301ef0 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/PistonMoveBlockEndPacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PistonMoveBlockEndPacket.java
+@@ -92,7 +92,7 @@ public class PistonMoveBlockEndPacket extends ExternalServerPacket {
+         this.to = in.readBlockPos();
+         this.pistonDir = in.readEnum(Direction.class);
+         this.retract = in.readBoolean();
+-        this.blockState = in.readById(Block.BLOCK_STATE_REGISTRY);
++        this.blockState = in.readById(Block.BLOCK_STATE_REGISTRY::byId);
+     }
+ 
+     @Override
+@@ -102,7 +102,7 @@ public class PistonMoveBlockEndPacket extends ExternalServerPacket {
+         out.writeBlockPos(this.to);
+         out.writeEnum(this.pistonDir);
+         out.writeBoolean(this.retract);
+-        out.writeId(Block.BLOCK_STATE_REGISTRY, this.blockState);
++        out.writeById(Block.BLOCK_STATE_REGISTRY::getId, this.blockState);
+     }
+ 
+     @Override
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionOnEntityPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionOnEntityPacket.java
+index 396caea9b37c1e3612635361ab93d8884191c28a..c607a08105f0229be1af75bada17cf92cdad2829 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionOnEntityPacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionOnEntityPacket.java
+@@ -37,10 +37,7 @@ public class PlayerActionOnEntityPacket extends ExternalServerPacket {
+         this.uuid = in.readUUID();
+         this.entityUuid = in.readUUID();
+ 
+-        ByteBuf buf = Unpooled.wrappedBuffer(in.readByteArray());
+-        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
+-        int packetId = friendlyByteBuf.readVarInt();
+-        action = (Packet<ServerGamePacketListener>) ConnectionProtocol.PLAY.createPacket(PacketFlow.SERVERBOUND, packetId, friendlyByteBuf);
++        action = (Packet<ServerGamePacketListener>) puregero.multipaper.util.PacketSerializer.readServerbound(in);
+     }
+ 
+     @Override
+@@ -48,13 +45,7 @@ public class PlayerActionOnEntityPacket extends ExternalServerPacket {
+         out.writeUUID(uuid);
+         out.writeUUID(entityUuid);
+ 
+-        ConnectionProtocol protocol = ConnectionProtocol.getProtocolForPacket(action);
+-        Integer id = protocol.getPacketId(PacketFlow.SERVERBOUND, action);
+-        ByteBuf buf = Unpooled.buffer();
+-        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
+-        friendlyByteBuf.writeVarInt(id);
+-        action.write(friendlyByteBuf);
+-        out.writeByteArray(buf.array());
++        puregero.multipaper.util.PacketSerializer.writeServerbound(out, action);
+     }
+ 
+     @Override
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionPacket.java
+index fd2a81936f4fb19534d165ea96f88cc6c2065b4f..7a8b929f0d415344505c9af043d2116850f831f2 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionPacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionPacket.java
+@@ -21,9 +21,9 @@ public class PlayerActionPacket extends ExternalServerPacket {
+     private static final Logger LOGGER = LogManager.getLogger(PlayerActionPacket.class.getSimpleName());
+ 
+     private final UUID uuid;
+-    private final Packet<ServerGamePacketListener> action;
++    private final Packet<?> action;
+ 
+-    public PlayerActionPacket(ServerPlayer player, Packet<ServerGamePacketListener> action) {
++    public PlayerActionPacket(ServerPlayer player, Packet<?> action) {
+         this.uuid = player.getUUID();
+         this.action = action;
+     }
+@@ -31,23 +31,14 @@ public class PlayerActionPacket extends ExternalServerPacket {
+     public PlayerActionPacket(FriendlyByteBuf in) {
+         uuid = in.readUUID();
+ 
+-        ByteBuf buf = Unpooled.wrappedBuffer(in.readByteArray());
+-        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
+-        int packetId = friendlyByteBuf.readVarInt();
+-        action = (Packet<ServerGamePacketListener>) ConnectionProtocol.PLAY.createPacket(PacketFlow.SERVERBOUND, packetId, friendlyByteBuf);
++        action = puregero.multipaper.util.PacketSerializer.readServerbound(in);
+     }
+ 
+     @Override
+     public void write(FriendlyByteBuf out) {
+         out.writeUUID(uuid);
+ 
+-        ConnectionProtocol protocol = ConnectionProtocol.getProtocolForPacket(action);
+-        Integer id = protocol.getPacketId(PacketFlow.SERVERBOUND, action);
+-        ByteBuf buf = Unpooled.buffer();
+-        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
+-        friendlyByteBuf.writeVarInt(id);
+-        action.write(friendlyByteBuf);
+-        out.writeByteArray(buf.array());
++        puregero.multipaper.util.PacketSerializer.writeServerbound(out, action);
+     }
+ 
+     @Override
+@@ -60,7 +51,7 @@ public class PlayerActionPacket extends ExternalServerPacket {
+                 return;
+             }
+ 
+-            action.handle(player.connection);
++            ((Packet) action).handle(player.connection);
+         });
+     }
+ }
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
+index 202ea4eb43c70952ccc71eec8715d8514a2a4a91..9d8ae8bc0ea6d0c2d87facedba025d691be63004 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
+@@ -4,9 +4,10 @@ import com.mojang.authlib.GameProfile;
+ import io.papermc.paper.chunk.system.scheduling.NewChunkHolder;
+ import net.minecraft.nbt.CompoundTag;
+ import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.network.codec.ByteBufCodecs;
++import net.minecraft.network.protocol.common.ServerboundClientInformationPacket;
+ import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
+ import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket;
+-import net.minecraft.network.protocol.game.ServerboundClientInformationPacket;
+ import net.minecraft.server.MinecraftServer;
+ import net.minecraft.server.level.ServerPlayer;
+ import net.minecraft.world.entity.HumanoidArm;
+@@ -71,7 +72,7 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+ 
+     public PlayerCreatePacket(FriendlyByteBuf in) {
+         in.maxNbtSize = Long.MAX_VALUE; // Allow unlimited NBT size
+-        gameProfile = in.readGameProfile();
++        gameProfile = ByteBufCodecs.GAME_PROFILE.decode(in);
+         world = in.readUtf();
+         x = in.readDouble();
+         y = in.readDouble();
+@@ -103,7 +104,7 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+ 
+     @Override
+     public void write(FriendlyByteBuf out) {
+-        out.writeGameProfile(gameProfile);
++        ByteBufCodecs.GAME_PROFILE.encode(out, gameProfile);
+         out.writeUtf(world);
+         out.writeDouble(x);
+         out.writeDouble(y);
+@@ -181,18 +182,7 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+ 
+         send(new EntityUpdatePacket(player, new ClientboundSetEntityDataPacket(player.getId(), player.getEntityData().getAll())), connections);
+ 
+-        if (player.clientViewDistance != null) {
+-            send(new PlayerActionPacket(player, new ServerboundClientInformationPacket(
+-                    player.locale,
+-                    player.clientViewDistance,
+-                    player.getChatVisibility(),
+-                    player.canChatInColor(),
+-                    player.getEntityData().get(ServerPlayer.DATA_PLAYER_MODE_CUSTOMISATION),
+-                    player.getEntityData().get(ServerPlayer.DATA_PLAYER_MAIN_HAND) == 0 ? HumanoidArm.LEFT : HumanoidArm.RIGHT,
+-                    player.isTextFilteringEnabled(),
+-                    player.allowsListing()
+-            )), connections);
+-        }
++        send(new PlayerActionPacket(player, new ServerboundClientInformationPacket(player.clientInformation())), connections);
+ 
+         if (player.isPassenger() || player.isVehicle()) {
+             NewChunkHolder newChunkHolder = MultiPaper.getChunkHolder(player.getRootVehicle());
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerInventoryUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerInventoryUpdatePacket.java
+index 3517b13be13c729056c6e05291b7f95312476432..0e04324640034a0a43f6f0112e1c9578e9126337 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerInventoryUpdatePacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerInventoryUpdatePacket.java
+@@ -66,17 +66,17 @@ public class PlayerInventoryUpdatePacket extends ExternalServerPacket {
+             ListTag items = tag.getList("items", Tag.TAG_COMPOUND);
+             items.forEach(i -> {
+                 CompoundTag item = (CompoundTag) i;
+-                ItemStack itemStack = ItemStack.of(item);
++                ItemStack itemStack = ItemStack.parseOptional(net.minecraft.server.MinecraftServer.getServer().registryAccess(), item);
+ 
+                 ItemStack replacingItem = null;
+                 if (item.contains("Replacing")) {
+-                    replacingItem = ItemStack.of(item.getCompound("Replacing"));
++                    replacingItem = ItemStack.parseOptional(net.minecraft.server.MinecraftServer.getServer().registryAccess(), item.getCompound("Replacing"));
+                 }
+ 
+                 MultiPaperInventoryHandler.updateInventory(player, component, item.getInt("Slot"), replacingItem, itemStack);
+             });
+ 
+-            player.detectEquipmentUpdates();
++            player.detectEquipmentUpdatesPublic();
+         });
+     }
+ }
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerListNameUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerListNameUpdatePacket.java
+index aab884bd07c93321ce857fc10b7a35d5d356c9bc..32d2440a74c11bad4869cc5f2f851622a88944c7 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerListNameUpdatePacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerListNameUpdatePacket.java
+@@ -22,13 +22,13 @@ public class PlayerListNameUpdatePacket extends ExternalServerPacket {
+ 
+     public PlayerListNameUpdatePacket(FriendlyByteBuf in) {
+         uuid = in.readUUID();
+-        listName = Component.Serializer.fromJson(in.readUtf());
++        listName = Component.Serializer.fromJson(in.readUtf(), MinecraftServer.getServer().registryAccess());
+     }
+ 
+     @Override
+     public void write(FriendlyByteBuf out) {
+         out.writeUUID(uuid);
+-        out.writeUtf(Component.Serializer.toJson(listName));
++        out.writeUtf(Component.Serializer.toJson(listName, MinecraftServer.getServer().registryAccess()));
+     }
+ 
+     @Override
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PullItemFromContainerPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PullItemFromContainerPacket.java
+index c7916316eacf6d104d80373864ef2b699d1e1b70..1cd209e1f77e98e8c062eb19780870b3a83c7571 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/PullItemFromContainerPacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PullItemFromContainerPacket.java
+@@ -42,7 +42,7 @@ public class PullItemFromContainerPacket extends ExternalServerPacket {
+         this.slot = in.readByte();
+ 
+         try {
+-            this.itemStack = ItemStack.of(MultiPaper.nbtFromBytes(in.readByteArray()));
++            this.itemStack = ItemStack.parseOptional(net.minecraft.server.MinecraftServer.getServer().registryAccess(), MultiPaper.nbtFromBytes(in.readByteArray()));
+         } catch (IOException e) {
+             throw new RuntimeException(e);
+         }
+@@ -57,7 +57,7 @@ public class PullItemFromContainerPacket extends ExternalServerPacket {
+         out.writeByte(this.slot);
+ 
+         try {
+-            out.writeByteArray(MultiPaper.nbtToBytes(this.itemStack.save(new CompoundTag())));
++            out.writeByteArray(MultiPaper.nbtToBytes((CompoundTag) this.itemStack.save(net.minecraft.server.MinecraftServer.getServer().registryAccess())));
+         } catch (IOException e) {
+             throw new RuntimeException(e);
+         }
+@@ -73,7 +73,7 @@ public class PullItemFromContainerPacket extends ExternalServerPacket {
+ 
+             if (container == null) {
+                 LOGGER.warn("Tried to take a " + this.itemStack + " in slot " + this.slot + " in a non-existent container at " + this.world + " " + this.source);
+-            } else if (!ItemStack.isSameItemSameTags(this.itemStack, container.getItem(this.slot))) {
++            } else if (!ItemStack.isSameItemSameComponents(this.itemStack, container.getItem(this.slot))) {
+                 LOGGER.warn("Tried to take a " + this.itemStack + " in slot " + this.slot + " from container at " + this.world + " " + this.source + ", but it is a " + container.getItem(this.slot));
+             } else {
+                 ItemStack origItemStack = container.getItem(this.slot);
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ScoreboardUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/ScoreboardUpdatePacket.java
+index a31139db7e5035f6e24b9675528381da5af0464d..4b70429a14c7803031e8de2db6b1ba2698898227 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ScoreboardUpdatePacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ScoreboardUpdatePacket.java
+@@ -11,7 +11,8 @@ import net.minecraft.server.MinecraftServer;
+ import net.minecraft.server.ServerScoreboard;
+ import net.minecraft.world.scores.Objective;
+ import net.minecraft.world.scores.PlayerTeam;
+-import net.minecraft.world.scores.Score;
++import net.minecraft.world.scores.ScoreAccess;
++import net.minecraft.world.scores.ScoreHolder;
+ import net.minecraft.world.scores.Team;
+ import net.minecraft.world.scores.criteria.ObjectiveCriteria;
+ import org.apache.logging.log4j.LogManager;
+@@ -49,11 +50,7 @@ public class ScoreboardUpdatePacket extends ExternalServerPacket {
+         String criteria = in.readUtf();
+         this.criteria = criteria.isEmpty() ? null : criteria;
+ 
+-        byte[] bytes = in.readByteArray();
+-        ByteBuf buf = Unpooled.wrappedBuffer(bytes);
+-        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
+-        int packetId = friendlyByteBuf.readVarInt();
+-        packet = ConnectionProtocol.PLAY.createPacket(PacketFlow.CLIENTBOUND, packetId, friendlyByteBuf);
++        packet = puregero.multipaper.util.PacketSerializer.readClientbound(in);
+     }
+ 
+     @Override
+@@ -62,13 +59,7 @@ public class ScoreboardUpdatePacket extends ExternalServerPacket {
+ 
+         out.writeUtf(criteria == null ? "" : criteria);
+ 
+-        ConnectionProtocol protocol = ConnectionProtocol.getProtocolForPacket(packet);
+-        Integer id = protocol.getPacketId(PacketFlow.CLIENTBOUND, packet);
+-        ByteBuf buf = Unpooled.buffer();
+-        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
+-        friendlyByteBuf.writeVarInt(id);
+-        packet.write(friendlyByteBuf);
+-        out.writeByteArray(buf.array());
++        puregero.multipaper.util.PacketSerializer.writeClientbound(out, packet);
+     }
+ 
+     @Override
+@@ -86,6 +77,8 @@ public class ScoreboardUpdatePacket extends ExternalServerPacket {
+                 handle(scoreboard, setPlayerTeamPacket);
+             } else if (packet instanceof ClientboundSetScorePacket setScorePacket) {
+                 handle(scoreboard, setScorePacket);
++            } else if (packet instanceof ClientboundResetScorePacket resetScorePacket) {
++                handle(scoreboard, resetScorePacket);
+             } else if (packet instanceof ClientboundSetObjectivePacket setObjectivePacket) {
+                 handle(scoreboard, criteria, setObjectivePacket);
+             } else if (packet instanceof ClientboundSetDisplayObjectivePacket setDisplayObjectivePacket) {
+@@ -134,13 +127,20 @@ public class ScoreboardUpdatePacket extends ExternalServerPacket {
+     }
+ 
+     private void handle(ServerScoreboard scoreboard, ClientboundSetScorePacket setScorePacket) {
+-        Objective objective = scoreboard.getObjective(setScorePacket.getObjectiveName());
++        Objective objective = scoreboard.getObjective(setScorePacket.objectiveName());
++        ScoreAccess score = scoreboard.getOrCreatePlayerScore(ScoreHolder.forNameOnly(setScorePacket.owner()), objective);
++        score.set(setScorePacket.score());
++    }
+ 
+-        if (setScorePacket.getMethod() == ServerScoreboard.Method.CHANGE) {
+-            Score score = scoreboard.getOrCreatePlayerScore(setScorePacket.getOwner(), objective);
+-            score.setScore(setScorePacket.getScore());
+-        } else if (setScorePacket.getMethod() == ServerScoreboard.Method.REMOVE) {
+-            scoreboard.resetPlayerScore(setScorePacket.getOwner(), objective);
++    private void handle(ServerScoreboard scoreboard, ClientboundResetScorePacket resetScorePacket) {
++        ScoreHolder holder = ScoreHolder.forNameOnly(resetScorePacket.owner());
++        if (resetScorePacket.objectiveName() == null) {
++            scoreboard.resetAllPlayerScores(holder);
++        } else {
++            Objective objective = scoreboard.getObjective(resetScorePacket.objectiveName());
++            if (objective != null) {
++                scoreboard.resetSinglePlayerScore(holder, objective);
++            }
+         }
+     }
+ 
+@@ -149,7 +149,7 @@ public class ScoreboardUpdatePacket extends ExternalServerPacket {
+         ObjectiveCriteria objectiveCriteria = criteria == null ? null : ObjectiveCriteria.byName(criteria).get();
+ 
+         if (setObjectivePacket.getMethod() == ClientboundSetObjectivePacket.METHOD_ADD && objective == null) {
+-            objective = scoreboard.addObjective(setObjectivePacket.getObjectiveName(), objectiveCriteria, setObjectivePacket.getDisplayName(), setObjectivePacket.getRenderType());
++            objective = scoreboard.addObjective(setObjectivePacket.getObjectiveName(), objectiveCriteria, setObjectivePacket.getDisplayName(), setObjectivePacket.getRenderType(), false, null);
+         } else if (setObjectivePacket.getMethod() == ClientboundSetObjectivePacket.METHOD_REMOVE) {
+             scoreboard.removeObjective(objective);
+         } if (setObjectivePacket.getMethod() == ClientboundSetObjectivePacket.METHOD_CHANGE || setObjectivePacket.getMethod() == ClientboundSetObjectivePacket.METHOD_ADD) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendChunkPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendChunkPacket.java
+index 8ed4aebd2a08e9dbcb1e5d17fe30eadb87428a74..88c38b51509d4d5454b47fa3dd4d7065c47aee22 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/SendChunkPacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendChunkPacket.java
+@@ -101,7 +101,7 @@ public class SendChunkPacket extends ExternalServerPacket {
+     }
+ 
+     private ChunkAccess loadChunk(ServerLevel level, ChunkPos pos, CompoundTag tag) {
+-        ChunkSerializer.InProgressChunkHolder newChunk = ChunkSerializer.loadChunk(level, level.getPoiManager(), pos, tag, true);
++        ChunkSerializer.InProgressChunkHolder newChunk = ChunkSerializer.readInProgressChunkHolder(level, level.getPoiManager(), pos, tag);
+         return newChunk.protoChunk instanceof ImposterProtoChunk imposterProtoChunk ? imposterProtoChunk.getWrapped() : newChunk.protoChunk;
+     }
+ 
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java
+index 80478852fb8998698d3bb26a2ba20119755ea4dc..0ae7013d0283367f1ca1af3be514bcbdd35ac092 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java
+@@ -45,11 +45,7 @@ public class SendPacketPacket extends ExternalServerPacket {
+             this.uuids[i] = in.readUUID();
+         }
+ 
+-        byte[] bytes = in.readByteArray();
+-        ByteBuf buf = Unpooled.wrappedBuffer(bytes);
+-        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
+-        int packetId = friendlyByteBuf.readVarInt();
+-        packet = ConnectionProtocol.PLAY.createPacket(PacketFlow.CLIENTBOUND, packetId, friendlyByteBuf);
++        packet = puregero.multipaper.util.PacketSerializer.readClientbound(in);
+     }
+ 
+     @Override
+@@ -59,13 +55,7 @@ public class SendPacketPacket extends ExternalServerPacket {
+             out.writeUUID(uuid);
+         }
+ 
+-        ConnectionProtocol protocol = ConnectionProtocol.getProtocolForPacket(packet);
+-        Integer id = protocol.getPacketId(PacketFlow.CLIENTBOUND, packet);
+-        ByteBuf buf = Unpooled.buffer();
+-        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
+-        friendlyByteBuf.writeVarInt(id);
+-        packet.write(friendlyByteBuf);
+-        out.writeByteArray(buf.array());
++        puregero.multipaper.util.PacketSerializer.writeClientbound(out, packet);
+     }
+ 
+     @Override
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java
+index ede67414c73e03f90360e7d7e3a20ce2c63fd318..181d5e526aaea6eaa423a0a2659409204441fa41 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java
+@@ -36,25 +36,14 @@ public class SendUpdatePacket extends ExternalServerPacket {
+     public SendUpdatePacket(FriendlyByteBuf in) {
+         world = in.readUUID();
+ 
+-        byte[] bytes = in.readByteArray();
+-        ByteBuf buf = Unpooled.wrappedBuffer(bytes);
+-        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
+-        friendlyByteBuf.maxNbtSize = Long.MAX_VALUE;
+-        int packetId = friendlyByteBuf.readVarInt();
+-        packet = ConnectionProtocol.PLAY.createPacket(PacketFlow.CLIENTBOUND, packetId, friendlyByteBuf);
++        packet = puregero.multipaper.util.PacketSerializer.readClientbound(in);
+     }
+ 
+     @Override
+     public void write(FriendlyByteBuf out) {
+         out.writeUUID(world);
+ 
+-        ConnectionProtocol protocol = ConnectionProtocol.getProtocolForPacket(packet);
+-        Integer id = protocol.getPacketId(PacketFlow.CLIENTBOUND, packet);
+-        ByteBuf buf = Unpooled.buffer();
+-        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
+-        friendlyByteBuf.writeVarInt(id);
+-        packet.write(friendlyByteBuf);
+-        out.writeByteArray(buf.array());
++        puregero.multipaper.util.PacketSerializer.writeClientbound(out, packet);
+     }
+ 
+     @Override
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SpawnUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SpawnUpdatePacket.java
+index 30ff6b8e4f77c156be3a8a0858cf69d32b179c0b..940037adbb4d3a1b0c10a69218f947371ab9c59e 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/SpawnUpdatePacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/SpawnUpdatePacket.java
+@@ -19,7 +19,7 @@ public class SpawnUpdatePacket extends ExternalServerPacket {
+ 
+     public SpawnUpdatePacket(ServerLevel level) {
+         this.world = level.getWorld().getName();
+-        this.pos = new BlockPos(level.levelData.getXSpawn(), level.levelData.getYSpawn(), level.levelData.getZSpawn());
++        this.pos = level.levelData.getSpawnPos();
+         this.angle = level.levelData.getSpawnAngle();
+     }
+ 
+diff --git a/src/main/java/puregero/multipaper/util/PacketSerializer.java b/src/main/java/puregero/multipaper/util/PacketSerializer.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..b53fe5c4f64a948eeb2a4123cf58a8da4c3f36a5
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/util/PacketSerializer.java
+@@ -0,0 +1,51 @@
++package puregero.multipaper.util;
++
++import io.netty.buffer.Unpooled;
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.network.ProtocolInfo;
++import net.minecraft.network.RegistryFriendlyByteBuf;
++import net.minecraft.network.protocol.Packet;
++import net.minecraft.network.protocol.game.ClientGamePacketListener;
++import net.minecraft.network.protocol.game.GameProtocols;
++import net.minecraft.network.protocol.game.ServerGamePacketListener;
++import net.minecraft.server.MinecraftServer;
++
++/**
++ * Serializes a vanilla packet to/from a byte array using the 1.20.6 stream codecs.
++ */
++public class PacketSerializer {
++
++    private static ProtocolInfo<ClientGamePacketListener> clientbound() {
++        return GameProtocols.CLIENTBOUND.bind(RegistryFriendlyByteBuf.decorator(MinecraftServer.getServer().registryAccess()));
++    }
++
++    private static ProtocolInfo<ServerGamePacketListener> serverbound() {
++        return GameProtocols.SERVERBOUND.bind(RegistryFriendlyByteBuf.decorator(MinecraftServer.getServer().registryAccess()));
++    }
++
++    @SuppressWarnings("unchecked")
++    public static void writeClientbound(FriendlyByteBuf out, Packet<?> packet) {
++        FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
++        clientbound().codec().encode(buf, (Packet<? super ClientGamePacketListener>) packet);
++        out.writeByteArray(buf.array());
++    }
++
++    public static Packet<?> readClientbound(FriendlyByteBuf in) {
++        FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.wrappedBuffer(in.readByteArray()));
++        buf.maxNbtSize = Long.MAX_VALUE;
++        return clientbound().codec().decode(buf);
++    }
++
++    @SuppressWarnings("unchecked")
++    public static void writeServerbound(FriendlyByteBuf out, Packet<?> packet) {
++        FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
++        serverbound().codec().encode(buf, (Packet<? super ServerGamePacketListener>) packet);
++        out.writeByteArray(buf.array());
++    }
++
++    public static Packet<?> readServerbound(FriendlyByteBuf in) {
++        FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.wrappedBuffer(in.readByteArray()));
++        buf.maxNbtSize = Long.MAX_VALUE;
++        return serverbound().codec().decode(buf);
++    }
++}

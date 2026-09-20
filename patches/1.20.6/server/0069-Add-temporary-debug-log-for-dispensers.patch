@@ -1,0 +1,30 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sun, 9 Jan 2022 15:50:30 +1000
+Subject: [PATCH] Add temporary debug log for dispensers
+
+
+diff --git a/src/main/java/net/minecraft/world/level/block/DispenserBlock.java b/src/main/java/net/minecraft/world/level/block/DispenserBlock.java
+index f6edfea463b3725d3a79aca38825e86dbf82175c..2789b31d7b59aea3e98cbcbcb59a1bc336e8f795 100644
+--- a/src/main/java/net/minecraft/world/level/block/DispenserBlock.java
++++ b/src/main/java/net/minecraft/world/level/block/DispenserBlock.java
+@@ -92,6 +92,7 @@ public class DispenserBlock extends BaseEntityBlock {
+     }
+ 
+     public void dispenseFrom(ServerLevel world, BlockState state, BlockPos pos) {
++        if (pos.getZ() == -43 && pos.getY() == 107 && pos.getX() == -132) new Exception("Dispensing " + pos).printStackTrace();
+         DispenserBlockEntity tileentitydispenser = (DispenserBlockEntity) world.getBlockEntity(pos, BlockEntityType.DISPENSER).orElse(null); // CraftBukkit - decompile error
+ 
+         if (tileentitydispenser == null) {
+diff --git a/src/main/java/net/minecraft/world/level/block/DropperBlock.java b/src/main/java/net/minecraft/world/level/block/DropperBlock.java
+index b4a742e8c513e458b34c216d1e907b47e3aac292..3194a8e9f4574601aa8fbd64c83a179a93db2baf 100644
+--- a/src/main/java/net/minecraft/world/level/block/DropperBlock.java
++++ b/src/main/java/net/minecraft/world/level/block/DropperBlock.java
+@@ -51,6 +51,7 @@ public class DropperBlock extends DispenserBlock {
+ 
+     @Override
+     public void dispenseFrom(ServerLevel world, BlockState state, BlockPos pos) {
++        if (pos.getZ() == -43 && pos.getY() == 107 && pos.getX() == -132) new Exception("Dispensing " + pos).printStackTrace();
+         DispenserBlockEntity tileentitydispenser = (DispenserBlockEntity) world.getBlockEntity(pos, BlockEntityType.DROPPER).orElse(null); // CraftBukkit - decompile error
+ 
+         if (tileentitydispenser == null) {

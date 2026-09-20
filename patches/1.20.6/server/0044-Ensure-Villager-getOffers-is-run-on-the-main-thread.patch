@@ -1,0 +1,27 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: officialplocki <officialplocki@gmx.de>
+Date: Sun, 20 Sep 2026 19:17:15 +0200
+Subject: [PATCH] Ensure Villager getOffers is run on the main thread
+
+
+diff --git a/src/main/java/net/minecraft/world/entity/npc/AbstractVillager.java b/src/main/java/net/minecraft/world/entity/npc/AbstractVillager.java
+index 6cbbca1db5362fa2dd5c5704c7fbaa612d3cbab1..c5f33291408d3878982c432bbebb032196cee8d9 100644
+--- a/src/main/java/net/minecraft/world/entity/npc/AbstractVillager.java
++++ b/src/main/java/net/minecraft/world/entity/npc/AbstractVillager.java
+@@ -6,6 +6,8 @@ import com.mojang.serialization.DataResult;
+ import java.util.ArrayList;
+ import java.util.Objects;
+ import javax.annotation.Nullable;
++
++import io.papermc.paper.util.MCUtil;
+ import net.minecraft.Util;
+ import net.minecraft.advancements.CriteriaTriggers;
+ import net.minecraft.core.particles.ParticleOptions;
+@@ -127,6 +129,7 @@ public abstract class AbstractVillager extends AgeableMob implements InventoryCa
+     @Override
+     public MerchantOffers getOffers() {
+         if (this.offers == null) {
++            if (!MCUtil.isMainThread()) return new MerchantOffers(); // MultiPaper - don't calculate trade offers async
+             this.offers = new MerchantOffers();
+             this.updateTrades();
+         }

@@ -1,0 +1,19 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sat, 25 Dec 2021 16:39:52 +1000
+Subject: [PATCH] Reobf error with ServerPlaceRecipe
+
+
+diff --git a/src/main/java/net/minecraft/recipebook/ServerPlaceRecipe.java b/src/main/java/net/minecraft/recipebook/ServerPlaceRecipe.java
+index 5c5a4b4450301cd3bc7c895f976b991467234a42..098e002968afa31fcd41074e1bd5496d5df3d78e 100644
+--- a/src/main/java/net/minecraft/recipebook/ServerPlaceRecipe.java
++++ b/src/main/java/net/minecraft/recipebook/ServerPlaceRecipe.java
+@@ -209,7 +209,7 @@ public class ServerPlaceRecipe<C extends Container> implements PlaceRecipe<Integ
+     private int getAmountOfFreeSlotsInInventory() {
+         int i = 0;
+ 
+-        for (ItemStack itemStack : this.inventory.items) {
++        for (ItemStack itemStack : this.inventory.items) { // MultiPaper - patch on this line to fix reobf error
+             if (itemStack.isEmpty()) {
+                 i++;
+             }

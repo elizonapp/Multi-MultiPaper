@@ -1,0 +1,26 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Wed, 16 Mar 2022 16:48:05 +1000
+Subject: [PATCH] Only touch tridents that we are ticking
+
+
+diff --git a/src/main/java/net/minecraft/world/entity/projectile/ThrownTrident.java b/src/main/java/net/minecraft/world/entity/projectile/ThrownTrident.java
+index f7dd785bdb0dbd0706b367b48235215ff1a0e08f..2bbb011af02ef84d5a57be91c0dbc86fa84b5999 100644
+--- a/src/main/java/net/minecraft/world/entity/projectile/ThrownTrident.java
++++ b/src/main/java/net/minecraft/world/entity/projectile/ThrownTrident.java
+@@ -25,6 +25,7 @@ import net.minecraft.world.phys.Vec3;
+ // CraftBukkit start
+ import org.bukkit.event.entity.EntityRemoveEvent;
+ // CraftBukkit end
++import puregero.multipaper.MultiPaper;
+ 
+ public class ThrownTrident extends AbstractArrow {
+ 
+@@ -202,6 +203,7 @@ public class ThrownTrident extends AbstractArrow {
+ 
+     @Override
+     public void playerTouch(Player player) {
++        if (MultiPaper.isChunkLocal(this.level().getChunkIfLoaded(blockPosition()))) // MultiPaper - ensure we're still ticking this entity
+         if (this.ownedBy(player) || this.getOwner() == null) {
+             super.playerTouch(player);
+         }

@@ -1,0 +1,32 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Wed, 22 Dec 2021 23:10:18 +1000
+Subject: [PATCH] Don't suck from external minecarts and boats
+
+
+diff --git a/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
+index ec43510e8acac55ef1e92bdc1502fca2932999ba..3b0ebc110255ccc3353c2ead3571bb9296b3f9c0 100644
+--- a/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
++++ b/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
+@@ -46,6 +46,7 @@ import org.bukkit.event.inventory.InventoryPickupItemEvent;
+ import org.bukkit.inventory.Inventory;
+ import puregero.multipaper.MultiPaper;
+ import puregero.multipaper.MultiPaperContainerHandler;
++import puregero.multipaper.MultiPaperEntityInteractHandler;
+ import puregero.multipaper.externalserverprotocol.PullItemFromContainerPacket;
+ // CraftBukkit end
+ 
+@@ -566,7 +567,12 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+         BlockState iblockdata = world.getBlockState(blockposition);
+         Container iinventory = HopperBlockEntity.getSourceContainer(world, hopper, blockposition, iblockdata);
+ 
+-        if (iinventory != null) {
++        // MultiPaper start - don't suck from external minecarts and boats
++        if (iinventory != null
++                && !(iinventory instanceof Entity entity && MultiPaperEntityInteractHandler.getOwner(entity) != null)
++                && !(iinventory instanceof CompoundContainer compoundContainer && !MultiPaper.isChunkLocal(world.getChunkIfLoaded(MultiPaperContainerHandler.getPrimaryChest(compoundContainer).getBlockPos())))
++                && !(iinventory instanceof BlockEntity blockEntity && !MultiPaper.isChunkLocal(world.getChunkIfLoaded(blockEntity.getBlockPos())))) {
++        // Multipaper end
+             Direction enumdirection = Direction.DOWN;
+             skipPullModeEventFire = skipHopperEvents; // Paper - Perf: Optimize Hoppers
+             int[] aint = HopperBlockEntity.getSlots(iinventory, enumdirection);

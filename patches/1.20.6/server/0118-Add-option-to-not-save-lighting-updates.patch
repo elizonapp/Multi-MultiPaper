@@ -1,0 +1,26 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sun, 26 Jun 2022 16:01:21 +1000
+Subject: [PATCH] Add option to not save lighting updates
+
+
+diff --git a/src/main/java/net/minecraft/server/level/ChunkHolder.java b/src/main/java/net/minecraft/server/level/ChunkHolder.java
+index e02b0680e9981fa813a2654eb57aa6916e3e585c..e6a4019d9be02d80a7d4689e91fe1cb01193443d 100644
+--- a/src/main/java/net/minecraft/server/level/ChunkHolder.java
++++ b/src/main/java/net/minecraft/server/level/ChunkHolder.java
+@@ -44,6 +44,7 @@ import net.minecraft.server.MinecraftServer;
+ 
+ import puregero.multipaper.MultiPaper;
+ import puregero.multipaper.MultiPaperChunkHandler;
++import puregero.multipaper.config.MultiPaperConfiguration;
+ 
+ public class ChunkHolder {
+ 
+@@ -234,6 +235,7 @@ public class ChunkHolder {
+         LevelChunk chunk = this.chunkMap.level.getChunkSource().getChunkAtIfLoadedImmediately(this.pos.x, this.pos.z); // this.getSendingChunk(); // Paper - no-tick view distance // MultiPaper - if we modify this chunk, even if it's not sent to players, we still need to send it to other servers
+ 
+         if (chunk != null) {
++            if (!MultiPaperConfiguration.get().optimizations.dontSaveJustForLightingUpdates) chunk.setUnsaved(true); // MultiPaper
+             int i = this.levelHeightAccessor.getSectionIndex(pos.getY());
+ 
+             if (i < 0 || i >= this.changedBlocksPerSection.length) return; // CraftBukkit - SPIGOT-6086, SPIGOT-6296

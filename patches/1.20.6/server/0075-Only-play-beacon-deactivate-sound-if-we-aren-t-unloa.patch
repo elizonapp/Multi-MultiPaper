@@ -1,0 +1,19 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sun, 23 Jan 2022 00:07:41 +1000
+Subject: [PATCH] Only play beacon deactivate sound if we aren't unloading the
+ chunk
+
+
+diff --git a/src/main/java/net/minecraft/world/level/block/entity/BeaconBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/BeaconBlockEntity.java
+index 5ad48d2003fbd83e60f6faa68532496131935828..54cc0ff9cb7c684eeed87a254b2551ee9fd1cbcf 100644
+--- a/src/main/java/net/minecraft/world/level/block/entity/BeaconBlockEntity.java
++++ b/src/main/java/net/minecraft/world/level/block/entity/BeaconBlockEntity.java
+@@ -311,6 +311,7 @@ public class BeaconBlockEntity extends BlockEntity implements MenuProvider, Name
+         // Paper end - beacon activation/deactivation events
+         // Paper start - fix MC-153086
+         if (this.levels > 0 && !this.beamSections.isEmpty()) {
++        if (this.level.getChunkIfLoaded(getBlockPos()) != null && this.level.getChunkIfLoaded(getBlockPos()).loaded) // MultiPaper - Only play beacon deactivate sound if we aren't unloading the chunk
+         BeaconBlockEntity.playSound(this.level, this.worldPosition, SoundEvents.BEACON_DEACTIVATE);
+         }
+         // Paper end

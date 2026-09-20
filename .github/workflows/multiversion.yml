@@ -1,0 +1,56 @@
+name: Build All Purpur Versions
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * *' # Once a day at 3am GMT
+  pull_request:
+    paths:
+      - patches/**
+      - purpur-versions.properties
+      - build.gradle.kts
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Selectable versions from purpur-versions.properties
+          - purpurVersion: 26.3
+            experimental: true
+          - purpurVersion: 26.2
+            experimental: true
+          - purpurVersion: 1.21.11
+            experimental: true
+          - purpurVersion: 26.1.2
+            experimental: true
+          - purpurVersion: 1.20.6
+            experimental: false
+          - purpurVersion: 1.20.1
+            experimental: false
+    continue-on-error: ${{ matrix.experimental }}
+    steps:
+      - name: Checkout Git Repository
+        uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          cache: 'gradle'
+          distribution: 'temurin'
+      - name: Configure Git User Details
+        run: git config --global user.email "actions@github.com" && git config --global user.name "Github Actions"
+      - name: Show configured version
+        run: ./gradlew printPurpurVersion -PpurpurVersion=${{ matrix.purpurVersion }}
+      - name: Apply Patches
+        run: ./gradlew applyPatches -PpurpurVersion=${{ matrix.purpurVersion }} --stacktrace
+      - name: Build Paperclip jar
+        if: ${{ !matrix.experimental }}
+        run: ./gradlew shadowjar createReobfPaperclipJar -PpurpurVersion=${{ matrix.purpurVersion }} --stacktrace
+      - name: Upload Paperclip jar
+        if: ${{ !matrix.experimental }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: multipaper-${{ matrix.purpurVersion }}.jar
+          path: build/libs/multipaper-paperclip-*-reobf.jar

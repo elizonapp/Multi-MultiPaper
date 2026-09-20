@@ -1,0 +1,21 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: mohammed jasem alaajel <xrambad@gmail.com>
+Date: Sat, 18 Feb 2023 02:12:11 +0400
+Subject: [PATCH] add not for entity#getTrackedPlayers
+
+
+diff --git a/src/main/java/org/bukkit/entity/Entity.java b/src/main/java/org/bukkit/entity/Entity.java
+index 325883333bd2494667b0d2c3b461de3f6341be10..6a6627ece71592896f3622b14b81ed8988bc85b0 100644
+--- a/src/main/java/org/bukkit/entity/Entity.java
++++ b/src/main/java/org/bukkit/entity/Entity.java
+@@ -1057,6 +1057,10 @@ public interface Entity extends Metadatable, CommandSender, Nameable, Persistent
+ 
+     /**
+      * Returns a set of {@link Player Players} within this entity's tracking range (players that can "see" this entity).
++     * <p>
++     * Please note that this will return Local players only! {@link Player#isLocalPlayer()}
++     * <p>
++     * you can use {@link #getNearbyEntities(double, double, double)} or {@link World#getNearbyPlayers(Location, double)} to get all players including external players
+      *
+      * @return players in tracking range
+      * @deprecated slightly misleading name, use {@link #getTrackedBy()}

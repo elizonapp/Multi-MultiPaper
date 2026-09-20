@@ -1,0 +1,67 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sun, 13 Feb 2022 14:02:25 +1000
+Subject: [PATCH] Run tasks while reading chunk data
+
+
+diff --git a/src/main/java/io/papermc/paper/chunk/system/io/RegionFileIOThread.java b/src/main/java/io/papermc/paper/chunk/system/io/RegionFileIOThread.java
+index 5d7021d9a46debc1bcf4936e44cdc567f0564e96..e3970d69bc5029ba5ee8ac8e3582f43e7ceb2523 100644
+--- a/src/main/java/io/papermc/paper/chunk/system/io/RegionFileIOThread.java
++++ b/src/main/java/io/papermc/paper/chunk/system/io/RegionFileIOThread.java
+@@ -15,6 +15,7 @@ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.world.level.ChunkPos;
+ import net.minecraft.world.level.chunk.storage.RegionFile;
+ import net.minecraft.world.level.chunk.storage.RegionFileStorage;
++import org.bukkit.Bukkit;
+ import org.slf4j.Logger;
+ import java.io.IOException;
+ import java.lang.invoke.VarHandle;
+@@ -931,6 +932,11 @@ private static Boolean doesRegionFileExist(final int chunkX, final int chunkZ, f
+         }, true, priority);
+ 
+         try {
++            // MultiPaper start - don't block the main thread
++            if (!ret.isDone() && Bukkit.isPrimaryThread()) {
++                world.chunkSource.mainThreadProcessor.managedBlock(ret::isDone);
++            }
++            // MultiPaper end
+             return ret.join();
+         } catch (final CompletionException ex) {
+             throw new IOException(ex);
+diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
+index e4f697681721b83172a26852ee30ec3e10dcd68a..fea8dd2ee0b6ba39a9f8a867dbee4e42ef22aae4 100644
+--- a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
++++ b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
+@@ -35,6 +35,7 @@ import net.minecraft.server.level.TicketType;
+ import net.minecraft.util.SortedArraySet;
+ import net.minecraft.util.Unit;
+ import net.minecraft.world.level.ChunkPos;
++import org.bukkit.Bukkit;
+ import org.bukkit.plugin.Plugin;
+ import org.slf4j.Logger;
+ import java.io.IOException;
+@@ -996,7 +997,11 @@ public final class ChunkHolderManager {
+         }
+ 
+         // Note: no need to busy wait on the chunk queue, poi load will complete off-main
+-
++        // MultiPaper start - don't block the main thread
++        if (!isCompleted.get() && Bukkit.isPrimaryThread()) {
++            world.chunkSource.mainThreadProcessor.managedBlock(isCompleted::get);
++        }
++        // MultiPaper end
+         boolean interrupted = false;
+         while (!isCompleted.get()) {
+             interrupted |= Thread.interrupted();
+diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
+index d1cd3a1ac4d239a146168a8d215c3bcfcacc31ac..1dd8a8c89521d90634a95f414b44f251ba87da60 100644
+--- a/src/main/java/net/minecraft/server/level/ChunkMap.java
++++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
+@@ -1,6 +1,7 @@
+ package net.minecraft.server.level;
+ 
+ import co.aikar.timings.Timing; // Paper
++import com.destroystokyo.paper.io.PaperFileIOThread;
+ import com.google.common.collect.ImmutableList;
+ import com.google.common.collect.ImmutableList.Builder;
+ import com.google.common.collect.Iterables;
