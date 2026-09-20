@@ -49,7 +49,18 @@ run/
 MultiPaper-Server
 MultiPaper-API
 
+# paperweight 2.x generated fork sources
+/paper-api
+/paper-server
+/purpur-api
+/purpur-server
+
+# toolchain selection marker (see settings.gradle.kts)
+/.multipaper-toolchain
+
 *.sh
 multipaper.jar
 
+!setup.sh
 !gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper-9/gradle-wrapper.jar

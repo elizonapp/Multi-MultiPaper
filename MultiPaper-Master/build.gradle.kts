@@ -31,7 +31,7 @@ tasks.jar {
     manifest {
         attributes(
             "Main-Class" to "puregero.multipaper.server.MultiPaperServer",
-            "Minecraft-Version" to "${properties["mcVersion"]}",
+            "Minecraft-Version" to "${rootProject.extra["mcVersion"]}",
             "Master-Version" to "${properties["masterVersion"]}"
         )
     }

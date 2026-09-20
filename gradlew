@@ -114,7 +114,52 @@ case "$( uname )" in                #(
   NONSTOP* )        nonstop=true ;;
 esac
 
-CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
+# MultiPaper: the upstream Purpur build determines which paperweight (and
+# therefore which Gradle) version is required. 1.20.x is built with
+# paperweight 1.x under Gradle 8, while 1.21.11 and newer are built with
+# paperweight 2.x under Gradle 9. Pick the matching wrapper automatically so
+# the same ./gradlew entry point works for every selectable version.
+PURPUR_VERSION=""
+PURPUR_VERSION_NEXT=""
+for arg in "$@"; do
+    if [ -n "$PURPUR_VERSION_NEXT" ]; then
+        PURPUR_VERSION=$arg
+        PURPUR_VERSION_NEXT=""
+        continue
+    fi
+    case $arg in
+        -PpurpurVersion=*)  PURPUR_VERSION=${arg#-PpurpurVersion=} ;;
+        --purpurVersion=*)  PURPUR_VERSION=${arg#--purpurVersion=} ;;
+        -PpurpurVersion|--purpurVersion) PURPUR_VERSION_NEXT=1 ;;
+    esac
+done
+if [ -z "$PURPUR_VERSION" ] && [ -f "$APP_HOME/gradle.properties" ]; then
+    PURPUR_VERSION=$(sed -n 's/^[[:space:]]*purpurVersion[[:space:]]*=[[:space:]]*//p' "$APP_HOME/gradle.properties" | tail -n 1)
+fi
+case $PURPUR_VERSION in
+    1.20.1|1.20.6) GRADLE_WRAPPER_DIR=wrapper ;;
+    *)             GRADLE_WRAPPER_DIR=wrapper-9 ;;
+esac
+CLASSPATH=$APP_HOME/gradle/$GRADLE_WRAPPER_DIR/gradle-wrapper.jar
+
+# Paperweight 2.x resolves Minecraft via Gradle properties (providers.
+# gradleProperty), and its nested builds only inherit system properties.
+# Derive mcVersion/apiVersion from the selected Purpur version and forward them
+# as org.gradle.project.* system properties so both toolchains (and their
+# nested builds) see them.
+if [ -n "$PURPUR_VERSION" ] && [ -f "$APP_HOME/purpur-versions.properties" ]; then
+    MC_VERSION=$(sed -n "s/^${PURPUR_VERSION}\.mcVersion=//p" "$APP_HOME/purpur-versions.properties" | tr -d '\r' | head -n 1)
+    API_VERSION=$(sed -n "s/^${PURPUR_VERSION}\.apiVersion=//p" "$APP_HOME/purpur-versions.properties" | tr -d '\r' | head -n 1)
+    # Use -Dorg.gradle.project.* rather than -P: paperweight's nested builds
+    # inherit system properties but not project properties.
+    set -- "$@" "-Dorg.gradle.project.purpurVersion=$PURPUR_VERSION"
+    if [ -n "$MC_VERSION" ]; then
+        set -- "$@" "-Dorg.gradle.project.mcVersion=$MC_VERSION"
+    fi
+    if [ -n "$API_VERSION" ]; then
+        set -- "$@" "-Dorg.gradle.project.apiVersion=$API_VERSION"
+    fi
+fi
 
 
 # Determine the Java command to use to start the JVM.

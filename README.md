@@ -5,13 +5,19 @@
 **MultiPaper is in public beta.** Most features work for most players most of
 the time, however things can occasionally break.
 
-1.20.1 [Purpur](https://github.com/PurpurMC/Purpur) fork that enables a server admin
+A [Purpur](https://github.com/PurpurMC/Purpur) fork that enables a server admin
 to scale a single world across multiple servers. Multiple MultiPaper servers run
 the same world and use a MultiPaper-Master to coordinate with each other and
 store server data. While the MultiPaper-Master is usually run as a standalone
 server, it can also be run as a BungeeCord or Velocity plugin, which has some benefits
 including being able to send players to the least busy server when they
 join.
+
+MultiPaper can be built against several Purpur releases: 26.3, 26.2, 1.21.11,
+26.1.2, 1.20.6 and 1.20.1. The version is chosen during the first start using
+`./setup.sh` and stored in `gradle.properties`. Note that the MultiPaper
+patches still need to be rebased onto a version before it can be built; the
+multi-version CI workflow validates each version (see below).
 
 MultiPaper 2.0:
 
@@ -208,6 +214,47 @@ Requirements:
 - You need `git` installed, with a configured user name and email. 
    On windows you need to run from git bash.
 - You need `jdk` 17+ installed to compile (and `jre` 17+ to run)
+
+### Choosing the Purpur version
+
+MultiPaper is a patch-based fork of Purpur, so the Minecraft version is fixed
+at build time. On a first start (after cloning the repository) select which
+Purpur version to build against:
+
+```bash
+./setup.sh                # interactive menu
+./setup.sh 1.20.6         # or pick a version directly
+```
+
+`setup.sh` lists every supported version (26.3, 26.2, 1.21.11, 26.1.2, 1.20.6,
+1.20.1) and stores your choice in `gradle.properties` via the `purpurVersion`
+property. `build.gradle.kts` then derives `mcVersion`, the artifact version and
+the pinned upstream commit (`purpurRef`) from this property, so you never have
+to edit those by hand. You can also override it per build with
+`-PpurpurVersion=26.3`.
+
+Refresh the pinned upstream commit for the selected version with:
+
+```bash
+./gradlew purpurRefLatest
+```
+
+### Patch sets per version
+
+Each Purpur version has its own patch set under `patches/<version>/api` and
+`patches/<version>/server`. The set that is applied is chosen by the selected
+`purpurVersion`, so multiple versions can be maintained and built in parallel.
+Currently `patches/1.20.1/` contains the full patch set; the other version
+directories are being filled in as the patches are rebased.
+
+To rebase the patches onto a new version:
+
+```bash
+./setup.sh <version>              # pick the version
+./gradlew applyPatches            # apply the patches; fix any conflicts
+./gradlew rebuildPatches          # regenerate the patches from your fixes
+./gradlew shadowjar               # compile to catch further breakage
+```
 
 Build instructions:
 1. Patch paper with: `./gradlew applyPatches`

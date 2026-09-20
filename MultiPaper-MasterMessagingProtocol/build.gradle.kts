@@ -3,7 +3,7 @@ plugins {
     `maven-publish`
 }
 
-version = "${properties["masterVersion"]}-${properties["mcVersion"]}"
+version = "${properties["masterVersion"]}-${rootProject.extra["mcVersion"]}"
 
 repositories {
     maven {
