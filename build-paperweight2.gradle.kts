@@ -27,6 +27,15 @@ val purpurVersionMcVersion = purpurVersions.getProperty("$purpurVersionId.mcVers
     ?: error("Unknown purpurVersion \"$purpurVersionId\" in purpur-versions.properties")
 val purpurRef = purpurVersions.getProperty("$purpurVersionId.ref")
     ?: error("No ref configured for purpurVersion \"$purpurVersionId\"")
+val purpurJavaVersion = purpurVersions.getProperty("$purpurVersionId.java")?.toInt() ?: 21
+
+// The generated build scripts differ per Purpur version (they follow Purpur's
+// own paperweight build script layout). Prefer a version specific build-data
+// patch when one exists, otherwise fall back to the shared one.
+fun buildDataPatch(name: String): File {
+    val versioned = file("build-data/$purpurVersionId/$name")
+    return if (versioned.exists()) versioned else file("build-data/$name")
+}
 
 logger.lifecycle("MultiPaper: building against Purpur $purpurVersionId (Minecraft $purpurVersionMcVersion)")
 
@@ -43,7 +52,7 @@ allprojects {
 
     java {
         toolchain {
-            languageVersion.set(JavaLanguageVersion.of(21))
+            languageVersion.set(JavaLanguageVersion.of(purpurJavaVersion))
         }
     }
 }
@@ -51,7 +60,7 @@ allprojects {
 subprojects {
     tasks.withType<JavaCompile> {
         options.encoding = Charsets.UTF_8.name()
-        options.release.set(21)
+        options.release.set(purpurJavaVersion)
         options.isFork = true
     }
     tasks.withType<Javadoc> {
@@ -78,12 +87,12 @@ paperweight {
         patchFile {
             path = "purpur-server/build.gradle.kts"
             outputFile = file("MultiPaper-Server/build.gradle.kts")
-            patchFile = file("build-data/multipaper-server.build.gradle.kts.patch")
+            patchFile = buildDataPatch("multipaper-server.build.gradle.kts.patch")
         }
         patchFile {
             path = "purpur-api/build.gradle.kts"
             outputFile = file("MultiPaper-API/build.gradle.kts")
-            patchFile = file("build-data/multipaper-api.build.gradle.kts.patch")
+            patchFile = buildDataPatch("multipaper-api.build.gradle.kts.patch")
         }
 
         // The API is split between Purpur's patched Paper API ("paper-api")

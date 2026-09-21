@@ -1,0 +1,74 @@
+--- a/purpur-api/build.gradle.kts
++++ b/purpur-api/build.gradle.kts
+@@ -1,11 +1,9 @@
+-import io.papermc.paperweight.checkstyle.JavadocTag
+ import paper.libs.com.google.gson.Gson
+ 
+ plugins {
+     `java-library`
+     `maven-publish`
+     idea
+-    id("io.papermc.paperweight.paper-checkstyle")
+ }
+ 
+ java {
+@@ -13,19 +11,6 @@ java {
+     withJavadocJar()
+ }
+ 
+-val projectCustomJavadocTags = setOf(
+-    JavadocTag("apiNote", "a", "API Note:"),
+-)
+-
+-paperCheckstyle {
+-    customJavadocTags = projectCustomJavadocTags
+-    directoriesToSkipFile = layout.projectDirectory.file("../paper-api/.checkstyle/ignored_directories.txt")
+-}
+-
+-tasks.named<io.papermc.paperweight.checkstyle.tasks.MergeCheckstyleConfigs>("mergeCheckstyleConfigs") {
+-    overrideConfigFile.set(layout.projectDirectory.file("../paper-api/.checkstyle/checkstyle.xml"))
+-}
+-
+ val annotationsVersion = "26.1.0"
+ val adventureVersion = "5.2.0"
+ val bungeeCordChatVersion = "1.21-R0.2-deprecated+build.21"
+@@ -105,9 +90,6 @@ dependencies {
+     testImplementation("org.ow2.asm:asm-tree:9.9.1")
+     mockitoAgent("org.mockito:mockito-core:5.22.0") { isTransitive = false } // configure mockito agent that is needed in newer java versions
+     testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.0.3")
+-
+-    // checkstyle
+-    checkstyle(project(":purpur-checkstyle"))
+ }
+ 
+ val generatedDir: java.nio.file.Path = rootProject.layout.projectDirectory.dir("paper-api/src/generated/java").asFile.toPath() // Purpur
+@@ -121,17 +103,21 @@ sourceSets {
+         java {
+             srcDir(generatedDir)
+             srcDir(file("../paper-api/src/main/java"))
++            srcDir(file("../purpur-api/src/main/java"))
+         }
+         resources {
+             srcDir(file("../paper-api/src/main/resources"))
++            srcDir(file("../purpur-api/src/main/resources"))
+         }
+     }
+     test {
+         java {
+             srcDir(file("../paper-api/src/test/java"))
++            srcDir(file("../purpur-api/src/test/java"))
+         }
+         resources {
+             srcDir(file("../paper-api/src/test/resources"))
++            srcDir(file("../purpur-api/src/test/resources"))
+         }
+     }
+ }
+@@ -230,7 +216,6 @@ tasks.withType<Javadoc>().configureEach {
+         "https://logging.apache.org/log4j/2.x/javadoc/log4j-api/",
+         "https://www.javadocs.dev/org.apache.maven.resolver/maven-resolver-api/1.7.3",
+     )
+-    options.tags(projectCustomJavadocTags.map { it.toOptionString() })
+ 
+     inputs.files(javadocSourcepath).ignoreEmptyDirectories().withPropertyName(javadocSourcepath.name + "-configuration")
+     val javadocSourcepathElements = javadocSourcepath.elements

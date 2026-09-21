@@ -1,0 +1,462 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sun, 20 Sep 2026 21:23:26 +0200
+Subject: [PATCH] Add MultiPaper API
+
+
+diff --git a/src/main/java/org/bukkit/Bukkit.java b/src/main/java/org/bukkit/Bukkit.java
+index 01481db67a78f60048af6737791b140d0adce028..99add38db8adaed59aedcb7f2c709c56ba11016a 100644
+--- a/src/main/java/org/bukkit/Bukkit.java
++++ b/src/main/java/org/bukkit/Bukkit.java
+@@ -789,6 +789,28 @@ public final class Bukkit {
+         return server.getServicesManager();
+     }
+ 
++    // MultiPaper start
++    /**
++     * Gets a multipaper notification manager.
++     *
++     * @return a multipaper notification manager
++     */
++    @NotNull
++    public static MultiPaperNotificationManager getMultiPaperNotificationManager() {
++        return server.getMultiPaperNotificationManager();
++    }
++
++    /**
++     * Get the MultiPaper name of this server.
++     *
++     * @return the MultiPaper name of this server
++     */
++    @NotNull
++    public static String getLocalServerName() {
++        return server.getLocalServerName();
++    }
++    // MultiPaper end
++
+     /**
+      * Gets a list of all worlds on this server.
+      *
+diff --git a/src/main/java/org/bukkit/Chunk.java b/src/main/java/org/bukkit/Chunk.java
+index d873b78f6935a23ff8f6092b80968267b182cc0f..60db944c6b2727f6cfa646ec35f6b01707ea4490 100644
+--- a/src/main/java/org/bukkit/Chunk.java
++++ b/src/main/java/org/bukkit/Chunk.java
+@@ -215,6 +215,26 @@ public interface Chunk extends PersistentDataHolder {
+      */
+     boolean unload();
+ 
++    // MultiPaper start
++
++    /**
++     * Returns whether the chunk is running on an external server or not.
++     *
++     * @return True if the chunk is an external chunk, or false if the chunk
++     * is running on this server or if it's unloaded.
++     */
++    public boolean isExternalChunk();
++
++    /**
++     * Returns whether the chunk is running on this server or not.
++     *
++     * @return True if the chunk is a local chunk, or false if the chunk
++     * is running on an external server or if it's unloaded.
++     */
++    public boolean isLocalChunk();
++
++    // MultiPaper end
++
+     /**
+      * Checks if this chunk can spawn slimes without being a swamp biome.
+      *
+diff --git a/src/main/java/org/bukkit/Location.java b/src/main/java/org/bukkit/Location.java
+index 85abe7e1401abc1beccbed023904264d263abe87..2c1faacb695f89ecb8ed921cb5f255c3145dcfae 100644
+--- a/src/main/java/org/bukkit/Location.java
++++ b/src/main/java/org/bukkit/Location.java
+@@ -344,6 +344,30 @@ public class Location implements Cloneable, ConfigurationSerializable, io.paperm
+         return this;
+     }
+ 
++    // MultiPaper start
++
++    /**
++     * Returns whether the chunk is running on an external server or not.
++     *
++     * @return True if the chunk is an external chunk, or false if the chunk
++     * is running on this server or if it's unloaded.
++     */
++    public boolean isChunkExternal() {
++        return this.getWorld().isChunkExternal(locToBlock(x) >> 4, locToBlock(z) >> 4);
++    }
++
++    /**
++     * Returns whether the chunk is running on this server or not.
++     *
++     * @return True if the chunk is a local chunk, or false if the chunk
++     * is running on an external server or if it's unloaded.
++     */
++    public boolean isChunkLocal() {
++        return this.getWorld().isChunkLocal(locToBlock(x) >> 4, locToBlock(z) >> 4);
++    }
++
++    // MultiPaper end
++
+     /**
+      * Adds the location by another.
+      *
+diff --git a/src/main/java/org/bukkit/MultiPaperNotificationManager.java b/src/main/java/org/bukkit/MultiPaperNotificationManager.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..809fcfc71b8d7ebdf9321b860543c9de929c2f45
+--- /dev/null
++++ b/src/main/java/org/bukkit/MultiPaperNotificationManager.java
+@@ -0,0 +1,138 @@
++package org.bukkit;
++
++import org.bukkit.entity.Player;
++import org.bukkit.plugin.Plugin;
++
++import java.nio.charset.StandardCharsets;
++import java.util.function.BiConsumer;
++import java.util.function.Consumer;
++
++public interface MultiPaperNotificationManager {
++
++    /**
++     * Listen to notifications sent by other servers.
++     * 
++     * @param plugin The plugin listening to these notifications
++     * @param channel The notification channel to listen to
++     * @param callback A handler for any data received
++     */
++    void on(Plugin plugin, String channel, Consumer<byte[]> callback);
++
++    /**
++     * Listen to notifications sent by other servers.
++     *
++     * @param plugin The plugin listening to these notifications
++     * @param channel The notification channel to listen to
++     * @param callback A handler for any data received
++     */
++    default void onString(Plugin plugin, String channel, Consumer<String> callback) {
++        on(plugin, channel, bytes -> callback.accept(new String(bytes, StandardCharsets.UTF_8)));
++    }
++
++    /**
++     * Listen to notifications sent by other servers.
++     *
++     * @param plugin The plugin listening to these notifications
++     * @param channel The notification channel to listen to
++     * @param callbackWithReply A handler for any data received, and a method to reply to the server on a specified channel
++     */
++    void on(Plugin plugin, String channel, BiConsumer<byte[], BiConsumer<String, byte[]>> callbackWithReply);
++
++    /**
++     * Listen to notifications sent by other servers.
++     *
++     * @param plugin The plugin listening to these notifications
++     * @param channel The notification channel to listen to
++     * @param callbackWithReply A handler for any data received, and a method to reply to the server on a specified channel
++     */
++    default void onString(Plugin plugin, String channel, BiConsumer<String, BiConsumer<String, String>> callbackWithReply) {
++        on(plugin, channel, (bytes, reply) -> callbackWithReply.accept(
++                new String(bytes, StandardCharsets.UTF_8),
++                (replyChannel, string) -> reply.accept(replyChannel, string.getBytes(StandardCharsets.UTF_8)))
++        );
++    }
++
++    /**
++     * Notify all other servers.
++     *
++     * @param channel The notification channel to notify on
++     * @param data The data to notify other servers with
++     */
++    void notify(String channel, byte[] data);
++
++    /**
++     * Notify all other servers.
++     *
++     * @param channel The notification channel to notify on
++     * @param data The data to notify other servers with
++     */
++    default void notify(String channel, String data) {
++        notify(channel, data.getBytes(StandardCharsets.UTF_8));
++    }
++
++    /**
++     * Notify other servers with the specified chunk loaded
++     *
++     * @param chunk The chunk that's loaded
++     * @param channel The notification channel to notify on
++     * @param data The data to notify other servers with
++     */
++    void notify(Chunk chunk, String channel, byte[] data);
++
++    /**
++     * Notify other servers with the specified chunk loaded
++     *
++     * @param chunk The chunk that's loaded
++     * @param channel The notification channel to notify on
++     * @param data The data to notify other servers with
++     */
++    default void notify(Chunk chunk, String channel, String data) {
++        notify(chunk, channel, data.getBytes(StandardCharsets.UTF_8));
++    }
++
++    /**
++     * Notify the owning server of the specified chunk.
++     * This chunk must be loaded on this server.
++     * This will notify this server if this server is the owning server.
++     *
++     * @param chunk The loaded chunk with an owning server
++     * @param channel The notification channel to notify on
++     * @param data The data to notify other servers with
++     */
++    void notifyOwningServer(Chunk chunk, String channel, byte[] data);
++
++    /**
++     * Notify the owning server of the specified chunk.
++     * This chunk must be loaded on this server.
++     * This will notify this server if this server is the owning server.
++     *
++     * @param chunk The loaded chunk with an owning server
++     * @param channel The notification channel to notify on
++     * @param data The data to notify other servers with
++     */
++    default void notifyOwningServer(Chunk chunk, String channel, String data) {
++        notifyOwningServer(chunk, channel, data.getBytes(StandardCharsets.UTF_8));
++    }
++
++    /**
++     * Notify the owning server of the specified player.
++     * This will notify this server if this server is the owning server.
++     *
++     * @param player The player with an owning server
++     * @param channel The notification channel to notify on
++     * @param data The data to notify other servers with
++     */
++    void notifyOwningServer(Player player, String channel, byte[] data);
++
++    /**
++     * Notify the owning server of the specified player.
++     * This will notify this server if this server is the owning server.
++     *
++     * @param player The player with an owning server
++     * @param channel The notification channel to notify on
++     * @param data The data to notify other servers with
++     */
++    default void notifyOwningServer(Player player, String channel, String data) {
++        notifyOwningServer(player, channel, data.getBytes(StandardCharsets.UTF_8));
++    }
++}
+diff --git a/src/main/java/org/bukkit/Server.java b/src/main/java/org/bukkit/Server.java
+index 485af1c80e5e1cefbce3849a108a1acee1f81cf4..787acb33a2575944d1e8a1a8f264e4f3bf8e278d 100644
+--- a/src/main/java/org/bukkit/Server.java
++++ b/src/main/java/org/bukkit/Server.java
+@@ -715,6 +715,24 @@ public interface Server extends PluginMessageRecipient, net.kyori.adventure.audi
+     @NotNull
+     public ServicesManager getServicesManager();
+ 
++    // MultiPaper start
++    /**
++     * Gets a multipaper notification manager.
++     *
++     * @return a multipaper notification manager
++     */
++    @NotNull
++    public MultiPaperNotificationManager getMultiPaperNotificationManager();
++
++    /**
++     * Get the MultiPaper name of this server.
++     *
++     * @return the MultiPaper name of this server
++     */
++    @NotNull
++    public String getLocalServerName();
++    // MultiPaper end
++
+     /**
+      * Gets a list of all worlds on this server.
+      *
+diff --git a/src/main/java/org/bukkit/World.java b/src/main/java/org/bukkit/World.java
+index b5ffb6317914e2bbf7267e1d1afb82463bf57278..31e9b9a96b111246ef285d480b09b2164e5bbae0 100644
+--- a/src/main/java/org/bukkit/World.java
++++ b/src/main/java/org/bukkit/World.java
+@@ -405,6 +405,26 @@ public interface World extends RegionAccessor, WorldInfo, PluginMessageRecipient
+     @Deprecated(since = "1.14")
+     public boolean isChunkInUse(int x, int z);
+ 
++    // MultiPaper start
++
++    /**
++     * Returns whether the chunk is running on an external server or not.
++     *
++     * @return True if the chunk is an external chunk, or false if the chunk
++     * is running on this server or if it's unloaded.
++     */
++    public boolean isChunkExternal(int x, int z);
++
++    /**
++     * Returns whether the chunk is running on this server or not.
++     *
++     * @return True if the chunk is a local chunk, or false if the chunk
++     * is running on an external server or if it's unloaded.
++     */
++    public boolean isChunkLocal(int x, int z);
++
++    // MultiPaper end
++
+     /**
+      * Loads the {@link Chunk} at the specified coordinates.
+      * <p>
+diff --git a/src/main/java/org/bukkit/block/Block.java b/src/main/java/org/bukkit/block/Block.java
+index 5c75b3d04..766e5b137 100644
+--- a/src/main/java/org/bukkit/block/Block.java
++++ b/src/main/java/org/bukkit/block/Block.java
+@@ -449,6 +449,28 @@ public interface Block extends Metadatable, Translatable, net.kyori.adventure.tr
+         return this.getBlockPower(BlockFace.SELF);
+     }
+ 
++    // MultiPaper start
++
++    /**
++     * Returns whether the block is in a chunk that's running on an external
++     * server or not.
++     *
++     * @return True if the block is in an external chunk, or false if the chunk
++     * is running on this server or if it's unloaded.
++     */
++    public boolean isInExternalChunk();
++
++    /**
++     * Returns whether the block is in a chunk that's running on this server
++     * or not.
++     *
++     * @return True if the block is in a local chunk, or false if the chunk
++     * is running on an external server or if it's unloaded.
++     */
++    public boolean isInLocalChunk();
++
++    // MultiPaper end
++
+     /**
+      * Checks if this block is empty.
+      * <p>
+diff --git a/src/main/java/org/bukkit/entity/Entity.java b/src/main/java/org/bukkit/entity/Entity.java
+index 49981db2398a3f88c1d62c91e35d637c4b92f876..0667558d2a2943f87648e8edd3bf530252d5c107 100644
+--- a/src/main/java/org/bukkit/entity/Entity.java
++++ b/src/main/java/org/bukkit/entity/Entity.java
+@@ -333,6 +333,26 @@ public interface Entity extends Metadatable, CommandSender, Nameable, Persistent
+      */
+     public int getEntityId();
+ 
++    // MultiPaper start
++
++    /**
++     * Returns whether the entity is in a chunk that's running on an external
++     * server or not.
++     *
++     * @return True if the entity is in an external chunk.
++     */
++    public boolean isInExternalChunk();
++
++    /**
++     * Returns whether the entity is in a chunk that's running on this server
++     * or not.
++     *
++     * @return True if the entity is in a local chunk.
++     */
++    public boolean isInLocalChunk();
++
++    // MultiPaper end
++
+     /**
+      * Returns the entity's current fire ticks (ticks before the entity stops
+      * being on fire).
+diff --git a/src/main/java/org/bukkit/entity/Player.java b/src/main/java/org/bukkit/entity/Player.java
+index 7efe22484451a756f0a5b85db5ca86aae1fd4b03..224ce46173dc604be72b5ecf3664e3f7c1c7e4db 100644
+--- a/src/main/java/org/bukkit/entity/Player.java
++++ b/src/main/java/org/bukkit/entity/Player.java
+@@ -591,6 +591,84 @@ public interface Player extends HumanEntity, Conversable, OfflinePlayer, PluginM
+         this.setRespawnLocation(location, false);
+     }
+ 
++    // MultiPaper start
++
++    /**
++     * Returns whether the player is on an external server or not.
++     *
++     * @return True if the player is on an external server.
++     */
++    public boolean isExternalPlayer();
++
++    /**
++     * Returns whether the player is on this server or not.
++     *
++     * @return True if the player is on this server.
++     */
++    public boolean isLocalPlayer();
++
++    /**
++     * Returns cross-server data that is stored under the specified key. Note
++     * that all plugins share the same set of keys. This data is
++     * non-persistent, it will be lost when the player disconnects.
++     *
++     * @param key The key the data is stored under.
++     * @return The data stored under the key, or null if the key isn't set.
++     */
++    @Nullable
++    public String getData(String key);
++
++    /**
++     * Store cross-server data under the specified key. Note that all plugins
++     * share the same set of keys. This data is non-persistent, it will be
++     * lost when the player disconnects.
++     *
++     * @param key The key to store the data under.
++     * @param value The data to store under the key.
++     */
++    public void setData(String key, String value);
++
++    /**
++     * Returns cross-server data that is stored under the specified key. Note
++     * that all plugins share the same set of keys. This data is persistent,
++     * it will be saved even if the player disconnects. This persistent data is
++     * saved onto the player's .dat file.
++     *
++     * @param key The key the data is stored under.
++     * @return The data stored under the key, or null if the key isn't set.
++     */
++    @Nullable
++    public String getPersistentData(String key);
++
++    /**
++     * Store cross-server data under the specified key. Note that all plugins
++     * share the same set of keys. This data is persistent, it will be saved
++     * even if the player disconnects. This persistent data is saved onto the
++     * player's .dat file.
++     *
++     * @param key The key to store the data under.
++     * @param value The data to store under the key.
++     */
++    public void setPersistentData(String key, String value);
++
++    /**
++     * Says a message (or runs a command) on other server excluding this one.
++     *
++     * @param msg chat message to say
++     */
++    public void chatOnOtherServers(String msg);
++
++    /**
++     * Get the bungeecord name of the server that this player is on.
++     *
++     * @return The bungeecord name of the server the player is on for external
++     *         players, or null for local players.
++     */
++    @Nullable
++    public String getExternalServerName();
++
++    // MultiPaper end
++
+     /**
+      * Sets the Location where the player will spawn at their bed.
+      *

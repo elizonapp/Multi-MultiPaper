@@ -1,0 +1,145 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sun, 20 Sep 2026 21:23:38 +0200
+Subject: [PATCH] Add multipaper key-value data storage
+
+
+diff --git a/src/main/java/org/bukkit/Bukkit.java b/src/main/java/org/bukkit/Bukkit.java
+index a3ce20de9b0dbfd45737cca17bed207d2aeb1b42..e30bf19cce9def9e1efa8b987434f550d8c83f0a 100644
+--- a/src/main/java/org/bukkit/Bukkit.java
++++ b/src/main/java/org/bukkit/Bukkit.java
+@@ -63,6 +63,7 @@ import org.jetbrains.annotations.ApiStatus;
+ import org.jetbrains.annotations.Contract;
+ import org.jetbrains.annotations.NotNull;
+ import org.jetbrains.annotations.Nullable;
++import puregero.multipaper.MultiPaperDataStorage;
+ 
+ /**
+  * Represents the Bukkit core, for version and Server singleton handling
+@@ -879,6 +880,17 @@ public final class Bukkit {
+     public static String getLocalServerName() {
+         return server.getLocalServerName();
+     }
++
++    /**
++     * Gets the multipaper key-value data storage. Accessing this data is
++     * asynchronous. This storage medium is hosted on the Master instance.
++     *
++     * @return the multipaper data storage
++     */
++    @NotNull
++    public static MultiPaperDataStorage getMultiPaperDataStorage() {
++        return server.getMultiPaperDataStorage();
++    }
+     // MultiPaper end
+ 
+     /**
+diff --git a/src/main/java/org/bukkit/Server.java b/src/main/java/org/bukkit/Server.java
+index ab9e7cc5abaa3580a7541d9d51ae463a6a1935ea..47ecef2e00bca3ba69f937270a382fe24fe3efd2 100644
+--- a/src/main/java/org/bukkit/Server.java
++++ b/src/main/java/org/bukkit/Server.java
+@@ -66,6 +66,7 @@ import org.jetbrains.annotations.ApiStatus;
+ import org.jetbrains.annotations.Contract;
+ import org.jetbrains.annotations.NotNull;
+ import org.jetbrains.annotations.Nullable;
++import puregero.multipaper.MultiPaperDataStorage;
+ 
+ /**
+  * Represents a server implementation.
+@@ -797,6 +798,15 @@ public interface Server extends PluginMessageRecipient, net.kyori.adventure.audi
+      */
+     @NotNull
+     public String getLocalServerName();
++
++    /**
++     * Gets the multipaper key-value data storage. Accessing this data is
++     * asynchronous. This storage medium is hosted on the Master instance.
++     *
++     * @return the multipaper data storage
++     */
++    @NotNull
++    public MultiPaperDataStorage getMultiPaperDataStorage();
+     // MultiPaper end
+ 
+     /**
+diff --git a/src/main/java/puregero/multipaper/MultiPaperDataStorage.java b/src/main/java/puregero/multipaper/MultiPaperDataStorage.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..44d552450efc1f2ad9d031ce754e165a9b59f3e2
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaperDataStorage.java
+@@ -0,0 +1,75 @@
++package puregero.multipaper;
++
++import java.util.Map;
++import java.util.concurrent.CompletableFuture;
++
++/**
++ * Asynchronous key-value storage hosted on the Master instance.
++ */
++public interface MultiPaperDataStorage {
++
++    CompletableFuture<String> get(String key);
++
++    default CompletableFuture<String> get(String key, String def) {
++        return get(key).thenApply(value -> value != null ? value : def);
++    }
++
++    default CompletableFuture<Long> getLong(String key) {
++        return get(key).thenApply(Long::parseLong);
++    }
++
++    default CompletableFuture<Long> getLong(String key, long def) {
++        return getLong(key).exceptionally(throwable -> def);
++    }
++
++    default CompletableFuture<Integer> getInt(String key) {
++        return get(key).thenApply(Integer::parseInt);
++    }
++
++    default CompletableFuture<Integer> getInt(String key, int def) {
++        return getInt(key).exceptionally(throwable -> def);
++    }
++
++    default CompletableFuture<Double> getDouble(String key) {
++        return get(key).thenApply(Double::parseDouble);
++    }
++
++    default CompletableFuture<Double> getDouble(String key, double def) {
++        return getDouble(key).exceptionally(throwable -> def);
++    }
++
++    default CompletableFuture<Map<String, String>> list() {
++        return list(null);
++    }
++
++    CompletableFuture<Map<String, String>> list(String prefix);
++
++    CompletableFuture<String> set(String key, String value);
++
++    default CompletableFuture<Long> set(String key, long value) {
++        return set(key, Long.toString(value)).thenApply(Long::parseLong);
++    }
++
++    default CompletableFuture<Integer> set(String key, int value) {
++        return set(key, Integer.toString(value)).thenApply(Integer::parseInt);
++    }
++
++    default CompletableFuture<Double> set(String key, double value) {
++        return set(key, Double.toString(value)).thenApply(Double::parseDouble);
++    }
++
++    CompletableFuture<String> add(String key, String increment);
++
++    default CompletableFuture<Long> add(String key, long increment) {
++        return add(key, Long.toString(increment)).thenApply(Long::parseLong);
++    }
++
++    default CompletableFuture<Integer> add(String key, int increment) {
++        return add(key, Integer.toString(increment)).thenApply(Integer::parseInt);
++    }
++
++    default CompletableFuture<Double> add(String key, double increment) {
++        return add(key, Double.toString(increment)).thenApply(Double::parseDouble);
++    }
++
++}

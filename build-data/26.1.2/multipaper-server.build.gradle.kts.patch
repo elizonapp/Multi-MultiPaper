@@ -1,33 +1,31 @@
 --- a/purpur-server/build.gradle.kts
 +++ b/purpur-server/build.gradle.kts
-@@ -35,6 +_,26 @@
-     activeFork = purpur
-     // Purpur end - Rebrand
- 
+@@ -33,7 +33,23 @@ paperweight {
+             outputDir = rootDirectory.dir("paper-server")
+         }
+     }
+-    activeFork = purpur
 +    // MultiPaper start
 +    val multipaper = forks.register("multipaper") {
 +        forks = purpur
 +        upstream.patchRepo("paperServer") {
 +            upstreamRepo = purpur.patchedRepo("paperServer")
-+            patchesDir = rootDirectory.dir("patches/${providers.gradleProperty("purpurVersion").getOrElse("1.21.11")}/server")
++            patchesDir = rootDirectory.dir("patches/${providers.gradleProperty("purpurVersion").getOrElse("26.1.2")}/server")
 +            outputDir = rootDirectory.dir("paper-server")
 +        }
-+        sourcePatchDir.set(rootDirectory.dir("patches/${providers.gradleProperty("purpurVersion").getOrElse("1.21.11")}/server/minecraft/sources"))
-+        featurePatchDir.set(rootDirectory.dir("patches/${providers.gradleProperty("purpurVersion").getOrElse("1.21.11")}/server/minecraft/features"))
 +        upstream.patchDir("purpurServer") {
 +            upstreamPath = "purpur-server"
 +            excludes = setOf("src/minecraft", "paper-patches", "minecraft-patches", "build.gradle.kts", "build.gradle.kts.patch")
-+            patchesDir = rootDirectory.dir("patches/${providers.gradleProperty("purpurVersion").getOrElse("1.21.11")}/server/purpur")
++            patchesDir = rootDirectory.dir("patches/${providers.gradleProperty("purpurVersion").getOrElse("26.1.2")}/server/purpur")
 +            outputDir = rootDirectory.dir("purpur-server")
 +        }
 +    }
 +    activeFork = multipaper
 +    // MultiPaper end
-+
-     spigot {
-         enabled = true
-         buildDataRef = "17f77cee7117ab9d6175f088ae8962bfd04e61a9"
-@@ -122,10 +_,14 @@
+     // Purpur end - Rebrand
+ 
+     /*updatingMinecraft { // Purpur start - TODO - snapshot - we don't need this
+@@ -105,10 +121,14 @@ sourceSets {
      main {
          java { srcDir("../paper-server/src/main/java") }
          resources { srcDir("../paper-server/src/main/resources") }
@@ -42,7 +40,7 @@
      }
  }
  val log4jPlugins = sourceSets.create("log4jPlugins") {
-@@ -154,7 +_,11 @@
+@@ -137,7 +157,10 @@ abstract class MockitoAgentProvider : CommandLineArgumentProvider {
  }
  
  dependencies {
@@ -51,7 +49,6 @@
 +    implementation(project(":multipaper-api")) // Purpur // MultiPaper
 +    implementation("commons-lang:commons-lang:2.6") // MultiPaper
 +    implementation("io.methvin:directory-watcher:0.15.0") // MultiPaper
-+    implementation("com.github.luben:zstd-jni:1.5.7-15") // MultiPaper
-     implementation("ca.spottedleaf:concurrentutil:0.0.8")
+     implementation("ca.spottedleaf:concurrentutil:0.0.10")
      implementation("org.jline:jline-terminal-ffm:3.27.1") // use ffm on java 22+
      implementation("org.jline:jline-terminal-jni:3.27.1") // fall back to jni on java 21

@@ -1,14 +1,20 @@
 import java.util.Locale
+import java.util.Properties
 
 pluginManagement {
     // The pluginManagement block is compiled separately from the rest of the
     // settings script, so version selection has to be resolved in here.
     val purpurVersionId = providers.gradleProperty("purpurVersion").getOrElse("1.20.1")
+    val purpurVersions = java.util.Properties().apply {
+        val registry = java.io.File("purpur-versions.properties")
+        if (registry.exists()) registry.inputStream().use { load(it) }
+    }
 
     // 1.20.x is built against Purpur's paperweight 1.x; 1.21.11 and newer use
-    // Purpur's paperweight 2.x (which requires Gradle 9).
-    val legacyToolchain = purpurVersionId == "1.20.1" || purpurVersionId == "1.20.6"
-    val paperweightVersion = if (legacyToolchain) "1.7.1" else "2.0.0-beta.19"
+    // Purpur's paperweight 2.x (which requires Gradle 9). The exact paperweight
+    // 2.x version differs per Purpur version and is listed in the registry.
+    val paperweightVersion = purpurVersions.getProperty("$purpurVersionId.paperweight")
+        ?: if (purpurVersionId == "1.20.1" || purpurVersionId == "1.20.6") "1.7.1" else "2.0.0-beta.19"
 
     repositories {
         gradlePluginPortal()
@@ -26,10 +32,22 @@ pluginManagement {
     }
 }
 
+// Java 25 toolchains (needed by the 26.x versions) are provisioned
+// automatically by the foojay resolver, just like in Purpur's own build.
+plugins {
+    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
+}
+
 rootProject.name = "multipaper"
 
 val purpurVersionId = providers.gradleProperty("purpurVersion").getOrElse("1.20.1")
-val legacyToolchain = purpurVersionId == "1.20.1" || purpurVersionId == "1.20.6"
+val purpurVersions = Properties().apply {
+    val registry = file("purpur-versions.properties")
+    if (registry.exists()) registry.inputStream().use { load(it) }
+}
+val selectedPaperweight = purpurVersions.getProperty("$purpurVersionId.paperweight")
+    ?: if (purpurVersionId == "1.20.1" || purpurVersionId == "1.20.6") "1.7.1" else "2.0.0-beta.19"
+val legacyToolchain = selectedPaperweight.startsWith("1.")
 
 // Paperweight 2.x has its own build script (build-paperweight2.gradle.kts);
 // the legacy paperweight 1.x flow keeps using build.gradle.kts.
